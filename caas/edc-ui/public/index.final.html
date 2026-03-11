@@ -49,7 +49,7 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; }
     body {
-      font-family: "Segoe UI", Inter, Arial, sans-serif;
+      font-family: "IBM Plex Sans", "Source Sans 3", "Segoe UI", Arial, sans-serif;
       background: linear-gradient(160deg, var(--bg-soft), var(--bg));
       color: var(--text);
       overflow: auto;
@@ -191,6 +191,22 @@
     h2 { margin: 0 0 8px; font-size: 18px; }
     h3 { margin: 14px 0 8px; font-size: 15px; }
     .muted { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 12px;
+      color: var(--muted);
+      background: var(--surface-2);
+      margin-bottom: 8px;
+    }
+    .status-pill.ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 40%, var(--line)); }
+    .status-pill.warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 50%, var(--line)); }
+    .status-pill.danger { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 55%, var(--line)); }
+    .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
 
     .row { display: flex; flex-wrap: wrap; gap: 8px; }
     label { display: block; margin-top: 8px; color: var(--muted); font-size: 12px; }
@@ -730,15 +746,19 @@
           <section class="card wide">
             <h2 data-i18n="secrets.title">Secretos</h2>
             <p class="muted" data-i18n="secrets.subtitle">Gestión rápida del vault de secretos.</p>
+            <div id="secretsStatus" class="status-pill warn">Detectando API de secretos...</div>
             <div class="grid">
               <div><label data-i18n="secrets.name">Nombre</label><input id="secretName" placeholder="nombre-del-secreto" /></div>
-              <div><label data-i18n="secrets.value">Valor</label><input id="secretValue" placeholder="valor-real" /></div>
+              <div><label data-i18n="secrets.value">Valor</label><input id="secretValue" type="password" placeholder="valor-real" /></div>
             </div>
             <div class="row" style="margin-top:8px">
               <button class="primary" id="btnSaveSecret" data-i18n="secrets.save">Guardar</button>
               <button class="ghost" id="btnListSecrets" data-i18n="secrets.list">Listar</button>
+              <button class="ghost" id="btnProbeSecrets">Diagnostico API secretos</button>
+              <button class="ghost" id="btnToggleSecretValue">Mostrar valor</button>
               <button class="danger" id="btnDeleteSecret" data-i18n="secrets.delete">Borrar</button>
             </div>
+            <p class="hint">La UI prueba automaticamente distintos endpoints EDC (`/v3/secrets/*` y `/v3/secret/*`) para no depender de una sola variante.</p>
             <pre id="secretsOut" style="margin-top:10px"></pre>
           </section>
           <section class="card wide tutorial">
@@ -857,6 +877,16 @@
         <div><label data-i18n="settings.consolePosition">Consola</label><select id="setConsolePos"><option value="right">Derecha</option><option value="bottom">Abajo (horizontal)</option></select></div>
         <div><label data-i18n="settings.consoleFont">Fuente consola</label><input id="setConsoleFont" type="range" min="11" max="18" value="13" /></div>
       </div>
+      <h3 style="margin-top:14px">Entorno operativo</h3>
+      <div class="grid">
+        <div><label>Management API base URL</label><input id="setApiBaseUrl" placeholder="/conectoruc3m/api/management" /></div>
+        <div><label>API key (override opcional)</label><input id="setApiKey" type="password" placeholder="si vacio, usa config.js" /></div>
+      </div>
+      <div class="grid">
+        <div><label>Timeout HTTP (ms)</label><input id="setApiTimeout" type="number" min="1000" step="500" value="15000" /></div>
+        <div><label>Reintentos por peticion</label><input id="setApiRetries" type="number" min="0" max="5" value="1" /></div>
+      </div>
+      <p class="hint">Estas opciones no cambian el despliegue. Solo esta sesion/localStorage del operador.</p>
       <p class="muted" data-i18n="settings.auto">Los cambios se aplican al instante.</p>
       <div class="row" style="margin-top:12px">
         <button class="ghost" id="btnCloseSettings" data-i18n="settings.close">Cerrar</button>
@@ -902,6 +932,10 @@
       consolePos: 'right',
       consoleFont: 13,
       consoleExpanded: false,
+      apiBaseUrl: cfg.managementApiUrl || '/api/management',
+      apiKeyOverride: '',
+      apiTimeoutMs: 15000,
+      apiRetries: 1,
     };
     const settingsKey = `eitel.ui.settings.${connectorName}`;
     let infoActionHandler = null;
@@ -926,7 +960,11 @@
       secretNames: [],
       catalogAutoRequestInFlight: false,
       secretsAvailable: false,
+      secretsApi: null,
     };
+
+    const getApiBaseUrl = () => (settings.apiBaseUrl || cfg.managementApiUrl || '/api/management').trim();
+    const getApiKey = () => (settings.apiKeyOverride || cfg.apiKey || '').trim();
 
     const i18n = {
       es: {
@@ -1128,28 +1166,98 @@
       return constraints.map(c => `${c.leftOperand || c['odrl:leftOperand'] || 'condición'} ${c.operator || c['odrl:operator'] || 'eq'} ${c.rightOperand || c['odrl:rightOperand'] || '-'}`).join(' | ');
     }
 
-    async function callApi(method, path, body) {
-      try {
-        const res = await fetch(`${cfg.managementApiUrl}${path}`, {
-          method,
-          headers: { 'x-api-key': cfg.apiKey, 'content-type': 'application/json' },
-          body: method === 'GET' || method === 'DELETE' ? undefined : body
-        });
-        const text = await res.text();
-        let data = text;
-        try { data = JSON.parse(text); } catch {}
-        return { status: res.status, data };
-      } catch (e) {
-        const err = {
-          status: 0,
-          error: String(e),
-          method,
-          path,
-          hint: 'Revisa managementApiUrl/config.js y proxy reverse para evitar CORS/preflight fallidos.'
-        };
-        writeOut(err);
-        return err;
+    async function callApi(method, path, body, options = {}) {
+      const retries = Number.isFinite(Number(options.retries)) ? Number(options.retries) : Number(settings.apiRetries || 0);
+      const timeoutMs = Number.isFinite(Number(options.timeoutMs)) ? Number(options.timeoutMs) : Number(settings.apiTimeoutMs || 15000);
+      const silent = Boolean(options.silent);
+      let attempt = 0;
+      let lastError = null;
+
+      while (attempt <= retries) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+          const res = await fetch(`${getApiBaseUrl()}${path}`, {
+            method,
+            headers: {
+              'x-api-key': getApiKey(),
+              'content-type': 'application/json',
+              ...(options.headers || {}),
+            },
+            body: method === 'GET' || method === 'DELETE' ? undefined : body,
+            signal: controller.signal,
+          });
+          clearTimeout(timeout);
+          const text = await res.text();
+          let data = text;
+          try { data = JSON.parse(text); } catch {}
+          const result = { status: res.status, data, attempt };
+          if (res.status >= 500 && attempt < retries) {
+            attempt++;
+            await new Promise(resolve => setTimeout(resolve, 250 * attempt));
+            continue;
+          }
+          return result;
+        } catch (e) {
+          clearTimeout(timeout);
+          lastError = e;
+          if (attempt < retries) {
+            attempt++;
+            await new Promise(resolve => setTimeout(resolve, 250 * attempt));
+            continue;
+          }
+        }
       }
+
+      const err = {
+        status: 0,
+        error: String(lastError || 'Error HTTP desconocido'),
+        method,
+        path,
+        hint: 'Revisa managementApiUrl/config.js y proxy reverse para evitar CORS/preflight fallidos.'
+      };
+      if (!silent) writeOut(err);
+      return err;
+    }
+
+    function updateSecretsStatus(kind, message) {
+      const el = document.getElementById('secretsStatus');
+      if (!el) return;
+      el.className = `status-pill ${kind}`;
+      el.textContent = message;
+    }
+
+    async function discoverSecretsApi(showOutput = false) {
+      const candidates = [
+        { method: 'POST', path: '/v3/secrets/request', body: q(), parser: (r) => unwrap(r).map(s => s['@id'] || s.id).filter(Boolean) },
+        { method: 'POST', path: '/v3/secret/request', body: q(), parser: (r) => unwrap(r).map(s => s['@id'] || s.id).filter(Boolean) },
+        { method: 'GET', path: '/v3/secrets', body: undefined, parser: (r) => {
+          const raw = Array.isArray(r?.data) ? r.data : (Array.isArray(r?.data?.content) ? r.data.content : []);
+          return raw.map(s => s?.['@id'] || s?.id || s?.key || s?.name).filter(Boolean);
+        } },
+      ];
+
+      for (const c of candidates) {
+        const resp = await callApi(c.method, c.path, c.body, { silent: true, retries: 0 });
+        if (resp.status >= 200 && resp.status < 300) {
+          state.secretsApi = c;
+          state.secretsAvailable = true;
+          state.secretNames = c.parser(resp);
+          refreshSecretSelect();
+          updateSecretsStatus('ok', `Secrets API activa: ${c.method} ${c.path}`);
+          const outSecrets = document.getElementById('secretsOut');
+          if (outSecrets) outSecrets.textContent = JSON.stringify(resp.data, null, 2);
+          if (showOutput) writeOut({ secretsApi: `${c.method} ${c.path}`, probe: resp });
+          return resp;
+        }
+      }
+
+      state.secretsApi = null;
+      state.secretsAvailable = false;
+      updateSecretsStatus('danger', 'Secrets API no disponible en este runtime');
+      const failure = { status: 404, error: 'No se detecto endpoint de secretos compatible.' };
+      if (showOutput) writeOut(failure);
+      return failure;
     }
 
     function applyI18n() {
@@ -1205,6 +1313,10 @@
       document.getElementById('setTheme').value = settings.theme;
       document.getElementById('setConsolePos').value = settings.consolePos;
       document.getElementById('setConsoleFont').value = String(settings.consoleFont);
+      if (document.getElementById('setApiBaseUrl')) document.getElementById('setApiBaseUrl').value = settings.apiBaseUrl;
+      if (document.getElementById('setApiKey')) document.getElementById('setApiKey').value = settings.apiKeyOverride;
+      if (document.getElementById('setApiTimeout')) document.getElementById('setApiTimeout').value = String(settings.apiTimeoutMs);
+      if (document.getElementById('setApiRetries')) document.getElementById('setApiRetries').value = String(settings.apiRetries);
       if (document.getElementById('setDummyUrl')) document.getElementById('setDummyUrl').value = settings.dummyUrl || '';
       applyI18n();
       updateConsoleButtons();
@@ -1218,9 +1330,14 @@
       document.querySelector(`.nav button[data-view="${view}"]`)?.classList.add('active');
       document.getElementById(`panel-${resolved}`)?.classList.add('active');
       if (resolved === 'catalog') loadCatalogs(false);
-      if (resolved === 'secrets' && !state.secretsAvailable) {
-        showInfoPopup('Secretos no disponibles', {
-          message: 'Este runtime no expone /v3/secrets/* en el management API. El resto del flujo sigue operativo.'
+      if (resolved === 'secrets') {
+        discoverSecretsApi(false).then((r) => {
+          if (!(r.status >= 200 && r.status < 300)) {
+            showInfoPopup('Secretos no disponibles', {
+              message: 'Este runtime no expone un endpoint de secretos compatible en management API. El resto del flujo sigue operativo.',
+              attempts: ['/v3/secrets/request', '/v3/secret/request', '/v3/secrets']
+            });
+          }
         });
       }
     }
@@ -1873,12 +1990,31 @@
     }
 
     async function saveSecret() {
-      if (!state.secretsAvailable) { writeOut({ status: 404, error: 'Secrets API no disponible en este runtime.' }); return; }
+      if (!state.secretsAvailable) {
+        await discoverSecretsApi(false);
+        if (!state.secretsAvailable) { writeOut({ status: 404, error: 'Secrets API no disponible en este runtime.' }); return; }
+      }
       const name = document.getElementById('secretName').value.trim();
       const value = document.getElementById('secretValue').value.trim();
       if (!name || !value) { writeOut({ status: 400, error: 'Nombre y valor requeridos.' }); return; }
-      const body = { '@context': { edc: 'https://w3id.org/edc/v0.0.1/ns/' }, '@type': 'Secret', '@id': name, value };
-      writeOut(await callApi('POST', '/v3/secrets', JSON.stringify(body)));
+      const payloads = [
+        { '@context': { edc: 'https://w3id.org/edc/v0.0.1/ns/' }, '@type': 'Secret', '@id': name, value },
+        { key: name, value },
+      ];
+      const endpoints = ['/v3/secrets', '/v3/secret'];
+      let last = null;
+      for (const endpoint of endpoints) {
+        for (const payload of payloads) {
+          const r = await callApi('POST', endpoint, JSON.stringify(payload), { silent: true });
+          last = r;
+          if (r.status >= 200 && r.status < 300) {
+            writeOut({ status: r.status, data: r.data, endpoint, payloadType: payload['@type'] ? 'edc-secret' : 'key-value' });
+            await listSecrets(false);
+            return;
+          }
+        }
+      }
+      writeOut({ status: last?.status || 500, error: 'No se pudo guardar el secreto en ningun endpoint compatible.', lastResponse: last });
       await listSecrets(false);
     }
 
@@ -1897,23 +2033,28 @@
     }
 
     async function listSecrets(showOutput = true) {
-      const r = await callApi('POST', '/v3/secrets/request', q());
-      state.secretsAvailable = r.status >= 200 && r.status < 300;
-      if (!state.secretsAvailable) {
-        if (showOutput) writeOut({ status: r.status, message: 'Secrets API no disponible en este runtime.' });
-        return r;
-      }
-      state.secretNames = unwrap(r).map(s => s['@id'] || s.id).filter(Boolean);
-      refreshSecretSelect();
-      document.getElementById('secretsOut').textContent = JSON.stringify(r.data, null, 2);
-      if (showOutput) writeOut(r);
+      const r = await discoverSecretsApi(showOutput);
       return r;
     }
     async function deleteSecret() {
-      if (!state.secretsAvailable) { writeOut({ status: 404, error: 'Secrets API no disponible en este runtime.' }); return; }
+      if (!state.secretsAvailable) {
+        await discoverSecretsApi(false);
+        if (!state.secretsAvailable) { writeOut({ status: 404, error: 'Secrets API no disponible en este runtime.' }); return; }
+      }
       const name = document.getElementById('secretName').value.trim();
       if (!name) { writeOut({ status: 400, error: 'Nombre requerido.' }); return; }
-      writeOut(await callApi('DELETE', `/v3/secrets/${encodeURIComponent(name)}`));
+      const candidates = [`/v3/secrets/${encodeURIComponent(name)}`, `/v3/secret/${encodeURIComponent(name)}`];
+      let last = null;
+      for (const path of candidates) {
+        const r = await callApi('DELETE', path, undefined, { silent: true });
+        last = r;
+        if (r.status >= 200 && r.status < 300) {
+          writeOut({ status: r.status, data: r.data, endpoint: path });
+          await listSecrets(false);
+          return;
+        }
+      }
+      writeOut({ status: last?.status || 500, error: 'No se pudo borrar el secreto con los endpoints probados.', lastResponse: last });
       await listSecrets(false);
     }
 
@@ -1940,6 +2081,15 @@
       if (document.getElementById('btnSaveSecret')) document.getElementById('btnSaveSecret').onclick = saveSecret;
       if (document.getElementById('btnListSecrets')) document.getElementById('btnListSecrets').onclick = () => listSecrets(true);
       if (document.getElementById('btnDeleteSecret')) document.getElementById('btnDeleteSecret').onclick = deleteSecret;
+      if (document.getElementById('btnProbeSecrets')) document.getElementById('btnProbeSecrets').onclick = () => discoverSecretsApi(true);
+      if (document.getElementById('btnToggleSecretValue')) {
+        document.getElementById('btnToggleSecretValue').onclick = () => {
+          const input = document.getElementById('secretValue');
+          if (!input) return;
+          input.type = input.type === 'password' ? 'text' : 'password';
+          document.getElementById('btnToggleSecretValue').textContent = input.type === 'password' ? 'Mostrar valor' : 'Ocultar valor';
+        };
+      }
       document.getElementById('btnCreatePolicy').onclick = async () => writeOut(await createOrUpdatePolicy());
       document.getElementById('btnListPolicies').onclick = listPolicies;
       document.getElementById('btnDeletePolicy').onclick = deletePolicy;
@@ -1971,11 +2121,20 @@
         settings.theme = document.getElementById('setTheme').value;
         settings.consolePos = document.getElementById('setConsolePos').value;
         settings.consoleFont = Number(document.getElementById('setConsoleFont').value || 13);
+        settings.apiBaseUrl = (document.getElementById('setApiBaseUrl')?.value || cfg.managementApiUrl || '/api/management').trim();
+        settings.apiKeyOverride = (document.getElementById('setApiKey')?.value || '').trim();
+        settings.apiTimeoutMs = Math.max(1000, Number(document.getElementById('setApiTimeout')?.value || 15000));
+        settings.apiRetries = Math.max(0, Math.min(5, Number(document.getElementById('setApiRetries')?.value || 1)));
         if (settings.consolePos === 'bottom') app.classList.remove('console-hidden');
         applySettings();
       };
       ['setLanguage', 'setTheme', 'setConsolePos'].forEach(id => document.getElementById(id).addEventListener('change', autoApply));
       document.getElementById('setConsoleFont').addEventListener('input', autoApply);
+      ['setApiBaseUrl', 'setApiKey', 'setApiTimeout', 'setApiRetries'].forEach(id => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('change', autoApply);
+      });
       document.getElementById('policyMode').addEventListener('change', applyPolicyMode);
 
       document.getElementById('btnConsoleToggle').onclick = () => {
@@ -2014,7 +2173,7 @@
       if (arcgis.enabled) {
         showAuthGate('Validando sesion ArcGIS...', false);
       }
-      document.getElementById('badge').textContent = `${role} · EDC · ${cfg.managementApiUrl || 'management api'}`;
+      document.getElementById('badge').textContent = `${role} · EDC · ${getApiBaseUrl() || 'management api'}`;
       document.getElementById('searchConnectorId').value = '';
       document.getElementById('transferAddress').value = '';
       document.getElementById('btnEitelPortal').onclick = () => window.open('https://uc3m-espacioeitel.hub.arcgis.com/', '_blank');
@@ -2030,11 +2189,12 @@
       ensureArcgisLogin().then((ok) => {
         if (!ok) return;
         if (arcgis.enabled && authState.username) {
-          document.getElementById('badge').textContent = `${role} · ${authState.username} · ${cfg.managementApiUrl || 'management api'}`;
+          document.getElementById('badge').textContent = `${role} · ${authState.username} · ${getApiBaseUrl() || 'management api'}`;
           document.getElementById('btnArcgisLogout').style.display = 'inline-flex';
         }
         refreshOverview();
         loadCatalogs(false);
+        listSecrets(false);
       });
     }
     init();
