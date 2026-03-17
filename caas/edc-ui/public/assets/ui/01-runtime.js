@@ -48,6 +48,12 @@
         if (!raw) return;
         const parsed = JSON.parse(raw);
         if (parsed && typeof parsed === 'object') Object.assign(settings, parsed);
+
+        const normalized = normalizeManagementApiBaseUrl(settings.apiBaseUrl || '');
+        if (!String(normalized).includes('/api/management')) {
+          settings.apiBaseUrl = buildSafeManagementApiBaseUrl();
+          try { localStorage.setItem(settingsKey, JSON.stringify(settings)); } catch {}
+        }
       } catch {}
     }
 
