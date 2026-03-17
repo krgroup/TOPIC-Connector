@@ -20,6 +20,9 @@
       if (!current) return '';
       if (current.includes('/api/management')) return current;
       if (!current.endsWith('/management')) return '';
+      if (cfg?.managementApiUrl && String(cfg.managementApiUrl).includes('/api/management')) {
+        return String(cfg.managementApiUrl).trim().replace(/\/+$/, '');
+      }
       try {
         const url = new URL(current, window.location.origin);
         const prefix = getUiPrefixPath();
@@ -649,11 +652,14 @@
       let path = document.getElementById('assetPath').value.trim();
 
       if (authType === 'arcgis-login') {
-        // ArcGIS style auth for source endpoint: include token in query and Authorization header.
-        const sep = baseUrl.includes('?') ? '&' : '?';
-        baseUrl = `${baseUrl}${sep}token=${encodeURIComponent(authToken)}`;
+        // ArcGIS style auth: query param token (+ f=json) and token header.
+        const hasF = /[?&]f=/i.test(baseUrl);
+        const sepF = baseUrl.includes('?') ? '&' : '?';
+        if (!hasF) baseUrl = `${baseUrl}${sepF}f=json`;
+        const sepToken = baseUrl.includes('?') ? '&' : '?';
+        baseUrl = `${baseUrl}${sepToken}token=${encodeURIComponent(authToken)}`;
         headers = {
-          Authorization: `Bearer ${authToken}`
+          token: authToken
         };
       } else {
         headers = buildAuthHeaders(headers);
@@ -692,7 +698,7 @@
             baseUrl: safeBaseUrl,
             path,
             headers: {
-              Authorization: 'Bearer <<access token>>'
+              token: '<<access token>>'
             }
           },
         };
