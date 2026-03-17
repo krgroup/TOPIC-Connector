@@ -363,10 +363,13 @@
     async function fetchArcgisAccessTokenFromPortalSession() {
       if (!arcgis?.portalUrl) return '';
       try {
+        // Use window.location.origin (stable base URL, e.g. https://gis.eiteldata.eu) so the token's
+        // referer is a prefix that both the browser validation fetch AND the EDC connector request match.
+        const stableReferer = window.location.origin;
         const body = new URLSearchParams({
           f: 'json',
           client: 'referer',
-          referer: window.location.href,
+          referer: stableReferer,
           expiration: '20160'
         });
         const res = await fetch(`${arcgis.portalUrl}/sharing/rest/generateToken`, {
@@ -832,7 +835,10 @@
           baseUrl,
           method: 'GET',
           path,
-          headers
+          headers,
+          // For ArcGIS token (client=referer), the EDC connector must send the Referer header.
+          // EDC's HttpData extension forwards DataAddress properties with the 'header:' prefix as HTTP headers.
+          ...(authType === 'arcgis-login' ? { 'header:Referer': window.location.origin } : {})
         }
       };
       const publishResp = await callApi('POST', '/v3/assets', JSON.stringify(body));
