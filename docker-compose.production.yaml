@@ -90,6 +90,20 @@ services:
     networks:
       - edc-net
 
+  conectoruc3m-local-assets:
+    build:
+      context: ./caas/control-plane
+      dockerfile: Dockerfile
+    container_name: conectoruc3m-local-assets
+    restart: always
+    environment:
+      CAAS_LOCAL_ASSETS_INTERNAL_BASE_URL: http://conectoruc3m-local-assets:8081/v1/local-assets/files
+      CAAS_LOCAL_ASSETS_PUBLIC_BASE_URL: https://gis.eiteldata.eu/conectoruc3m/local-assets/files
+    volumes:
+      - local_assets_data:/app/data/local-assets
+    networks:
+      - edc-net
+
   conectoruc3m-gateway:
     image: nginx:1.27-alpine
     container_name: conectoruc3m-gateway
@@ -97,6 +111,7 @@ services:
     depends_on:
       - conectoruc3m-ui
       - conectoruc3m
+      - conectoruc3m-local-assets
     ports:
       - "12000:80"
     volumes:
@@ -112,6 +127,8 @@ services:
 volumes:
   pg_data:
     name: conectoruc3m_pg_data
+  local_assets_data:
+    name: conectoruc3m_local_assets_data
 
 networks:
   edc-net:

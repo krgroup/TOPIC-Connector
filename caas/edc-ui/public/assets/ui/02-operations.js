@@ -109,6 +109,11 @@
       return `/${parts[0]}/`;
     }
 
+    function getLocalAssetsApiBaseUrl() {
+      const prefix = getUiPrefixPath().replace(/\/+$/, '');
+      return `${window.location.origin}${prefix}/local-assets`;
+    }
+
     function getAutoFixedApiBaseUrl() {
       const current = String(getApiBaseUrl() || '').trim();
       if (!current) return '';
@@ -580,6 +585,20 @@
       return (document.getElementById('transferMode')?.value || 'push').trim();
     }
 
+    function getSelectedAssetSourceMode() {
+      return (document.getElementById('assetSourceMode')?.value || 'remote-url').trim();
+    }
+
+    function syncAssetSourceModeUi() {
+      const mode = getSelectedAssetSourceMode();
+      const baseUrlWrap = document.getElementById('assetRemoteBaseUrlWrap');
+      const pathWrap = document.getElementById('assetRemotePathWrap');
+      const localFileWrap = document.getElementById('assetLocalFileWrap');
+      if (baseUrlWrap) baseUrlWrap.style.display = mode === 'local-file' ? 'none' : '';
+      if (pathWrap) pathWrap.style.display = mode === 'local-file' ? 'none' : '';
+      if (localFileWrap) localFileWrap.style.display = mode === 'local-file' ? '' : 'none';
+    }
+
     function syncTransferModeUi() {
       const mode = getSelectedTransferMode();
       const sinkWrap = document.getElementById('sinkBaseUrlWrap');
@@ -635,6 +654,7 @@
 
       const props = asset.properties || {};
       const dataAddress = asset.dataAddress || asset['edc:dataAddress'] || {};
+      const sourceMode = String(props['eitel:sourceMode'] || '').trim();
       const baseUrl = String(dataAddress.baseUrl || '').trim();
       let path = String(dataAddress.path || '').trim();
       let headers = { ...(dataAddress.headers || {}) };
@@ -653,7 +673,9 @@
         headers = { ...headers, token: authToken };
       }
 
-      const sourceUrl = `${baseUrl.replace(/\/+$/, '')}${path || ''}`;
+      const sourceUrl = sourceMode === 'local-file' && props['eitel:localAssetPublicUrl']
+        ? String(props['eitel:localAssetPublicUrl']).trim()
+        : `${baseUrl.replace(/\/+$/, '')}${path || ''}`;
       try {
         const response = await fetch(sourceUrl, {
           method: 'GET',
@@ -756,6 +778,30 @@
         };
       } finally {
         clearTimeout(timer);
+      }
+    }
+
+    async function uploadLocalAssetSource(assetId) {
+      const fileInput = document.getElementById('assetLocalFile');
+      const file = fileInput?.files?.[0];
+      if (!file) {
+        return { status: 400, error: 'Selecciona un archivo local antes de publicar el asset.' };
+      }
+
+      const formData = new FormData();
+      formData.append('file', file, file.name || `${assetId || 'asset'}.bin`);
+
+      try {
+        const res = await fetch(`${getLocalAssetsApiBaseUrl()}/upload`, {
+          method: 'POST',
+          body: formData,
+        });
+        const text = await res.text();
+        let data = text;
+        try { data = JSON.parse(text); } catch {}
+        return { status: res.status, data };
+      } catch (error) {
+        return { status: 500, error: `No se pudo subir el archivo local: ${String(error)}` };
       }
     }
 
@@ -976,8 +1022,11 @@
 
     async function createOrUpdateAsset() {
       const id = document.getElementById('assetIdPreview').value;
+      const sourceMode = getSelectedAssetSourceMode();
 
-      const authType = document.getElementById('pubAuthType')?.value || 'none';
+      const authType = sourceMode === 'local-file'
+        ? 'none'
+        : (document.getElementById('pubAuthType')?.value || 'none');
       let authToken = authType === 'arcgis-login'
         ? await resolveArcgisTokenForPublish()
         : resolveAuthTokenForPublish(authType);
@@ -1018,6 +1067,22 @@
 
       let baseUrl = document.getElementById('assetBaseUrl').value.trim();
       let path = document.getElementById('assetPath').value.trim();
+      let contentType = 'application/json';
+      let localUploadInfo = null;
+
+      if (sourceMode === 'local-file') {
+        const uploadResp = await uploadLocalAssetSource(id);
+        if (uploadResp.status < 200 || uploadResp.status >= 300) {
+          writeOut(uploadResp);
+          showInfoPopup('Error subiendo archivo local', uploadResp);
+          return uploadResp;
+        }
+        localUploadInfo = uploadResp.data || {};
+        baseUrl = String(localUploadInfo.internalBaseUrl || '').trim();
+        path = String(localUploadInfo.path || '').trim();
+        headers = {};
+        contentType = String(localUploadInfo.contentType || 'application/octet-stream').trim();
+      }
 
       const normalizedUrlParts = normalizeHttpDataUrlParts(baseUrl, path);
       baseUrl = normalizedUrlParts.baseUrl;
@@ -1032,7 +1097,7 @@
         headers = buildAuthHeaders(headers);
       }
 
-      if (authType !== 'none') {
+      if (authType !== 'none' && sourceMode !== 'local-file') {
         const sourcePreview = await validateSourcePayloadPreview(baseUrl, path, headers);
         if (!sourcePreview.ok) {
           showInfoPopup('Origen con error', {
@@ -1050,8 +1115,11 @@
         '@type': 'Asset',
         properties: {
           name: document.getElementById('assetName').value.trim(),
-          contenttype: 'application/json',
-          'eitel:authType': document.getElementById('pubAuthType')?.value || 'none',
+          contenttype: contentType,
+          'eitel:authType': authType,
+          'eitel:sourceMode': sourceMode,
+          'eitel:localAssetPublicUrl': localUploadInfo?.publicUrl || '',
+          'eitel:localAssetFilename': localUploadInfo?.filename || '',
           'eitel:authSecret': document.getElementById('pubAuthSecret')?.value || '',
           'eitel:authClientId': document.getElementById('pubAuthClientId')?.value.trim() || '',
           'eitel:authClientSecret': document.getElementById('pubAuthClientSecret')?.value.trim() || '',
@@ -1075,9 +1143,11 @@
         showInfoPopup('Asset publicado', {
           status: publishResp.status,
           assetId: id,
+          sourceMode,
           baseUrl,
           path,
           authType,
+          localUpload: localUploadInfo,
           hint: 'El asset se ha creado/actualizado correctamente en Management API.'
         });
       }

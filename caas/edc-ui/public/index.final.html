@@ -91,9 +91,18 @@
               <div><label>Contract Definition ID</label><input id="contractDefIdPreview" readonly /></div>
             </div>
             <label data-i18n="publish.name">Nombre</label><input id="assetName" placeholder="ej: Dataset Clima UC3M" />
+            <label>Origen del asset</label>
+            <select id="assetSourceMode">
+              <option value="remote-url">Base URL remota</option>
+              <option value="local-file">Archivo local</option>
+            </select>
             <div class="grid">
-              <div><label data-i18n="publish.baseUrl">Base URL</label><input id="assetBaseUrl" placeholder="https://api.tu-dominio.com" /></div>
-              <div><label>Path</label><input id="assetPath" placeholder="/ruta/recurso" /></div>
+              <div id="assetRemoteBaseUrlWrap"><label data-i18n="publish.baseUrl">Base URL</label><input id="assetBaseUrl" placeholder="https://api.tu-dominio.com" /></div>
+              <div id="assetRemotePathWrap"><label>Path</label><input id="assetPath" placeholder="/ruta/recurso" /></div>
+            </div>
+            <div id="assetLocalFileWrap" style="display:none">
+              <label>Archivo local</label><input id="assetLocalFile" type="file" />
+              <p class="muted">Se sube al servicio local del conector y luego se publica el asset usando esa URL interna.</p>
             </div>
             <h3>Autenticación opcional</h3>
             <div class="grid">
@@ -135,8 +144,10 @@
           <section class="card wide tutorial">
             <h3>Mini tutorial</h3>
             <ol>
-              <li>Introduce `Asset key`, nombre y `Base URL` del endpoint real que quieres compartir.</li>
-              <li>Si necesitas autenticacion de origen, selecciona tipo y secreto del vault.</li>
+              <li>Introduce `Asset key` y nombre del asset.</li>
+              <li>En `Origen del asset`, elige `Base URL remota` o `Archivo local`.</li>
+              <li>Si eliges `Base URL remota`, completa `Base URL` y `Path`, y si necesitas autenticacion de origen, selecciona tipo y secreto del vault.</li>
+              <li>Si eliges `Archivo local`, selecciona el fichero desde tu equipo. La UI lo subirá al servicio local y publicará el asset con esa fuente.</li>
               <li>Pulsa "Crear/Actualizar asset" y confirma en consola que devuelve `2xx`.</li>
             </ol>
           </section>
@@ -496,11 +507,11 @@
     </div>
   </div>
 
-    <script src="config.js?v=20260317f"></script>
-  <script src="assets/ui/01-runtime.js?v=20260317f"></script>
-  <script src="assets/ui/02-operations.js?v=20260317f"></script>
-  <script src="assets/ui/03-secrets.js?v=20260317f"></script>
-  <script src="assets/ui/04-bootstrap.js?v=20260317f"></script>
+    <script src="config.js?v=20260317g"></script>
+  <script src="assets/ui/01-runtime.js?v=20260317g"></script>
+  <script src="assets/ui/02-operations.js?v=20260317g"></script>
+  <script src="assets/ui/03-secrets.js?v=20260317g"></script>
+  <script src="assets/ui/04-bootstrap.js?v=20260317g"></script>
 </body>
 </html>
 

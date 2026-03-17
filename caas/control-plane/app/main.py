@@ -1,13 +1,16 @@
 from __future__ import annotations
 
 from datetime import datetime, UTC
+from mimetypes import guess_type
 from pathlib import Path
 from typing import Literal
+from uuid import uuid4
+import shutil
 
 import yaml
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
@@ -35,6 +38,9 @@ class Settings(BaseSettings):
 
     sqlite_url: str = 'sqlite:///./data/caas.db'
     generated_output_dir: str = './data/generated'
+    local_assets_dir: str = './data/local-assets'
+    local_assets_internal_base_url: str = 'http://conectoruc3m-local-assets:8081/v1/local-assets/files'
+    local_assets_public_base_url: str = 'https://gis.eiteldata.eu/conectoruc3m/local-assets/files'
 
 
 settings = Settings()
@@ -97,6 +103,7 @@ def get_db():
 def startup_event():
     Base.metadata.create_all(bind=engine)
     Path(settings.generated_output_dir).mkdir(parents=True, exist_ok=True)
+    Path(settings.local_assets_dir).mkdir(parents=True, exist_ok=True)
 
 
 class TenantCreate(BaseModel):
@@ -113,6 +120,11 @@ class ConnectorPlanRequest(BaseModel):
 
 dummy_sink_records: list[dict] = []
 MAX_DUMMY_RECORDS = 200
+
+
+def _safe_upload_name(name: str) -> str:
+    candidate = Path(name or 'upload.bin').name.strip()
+    return candidate or 'upload.bin'
 
 
 def _prefix_for(tenant: str) -> str:
@@ -281,6 +293,44 @@ def dummy_sink_clear_records():
     cleared = len(dummy_sink_records)
     dummy_sink_records.clear()
     return {'ok': True, 'cleared': cleared}
+
+
+@app.post('/v1/local-assets/upload')
+async def upload_local_asset(file: UploadFile = File(...)):
+    filename = _safe_upload_name(file.filename or 'upload.bin')
+    file_id = uuid4().hex
+    target_dir = Path(settings.local_assets_dir) / file_id
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / filename
+
+    with target_path.open('wb') as buffer:
+        shutil.copyfileobj(file.file, buffer)
+
+    path = f'/{file_id}/{filename}'
+    size = target_path.stat().st_size
+    media_type = file.content_type or guess_type(filename)[0] or 'application/octet-stream'
+    return {
+        'fileId': file_id,
+        'filename': filename,
+        'contentType': media_type,
+        'bytes': size,
+        'path': path,
+        'internalBaseUrl': settings.local_assets_internal_base_url.rstrip('/'),
+        'publicUrl': f"{settings.local_assets_public_base_url.rstrip('/')}{path}",
+    }
+
+
+@app.get('/v1/local-assets/files/{file_id}/{filename}')
+def get_local_asset(file_id: str, filename: str):
+    safe_name = _safe_upload_name(filename)
+    target_path = (Path(settings.local_assets_dir) / file_id / safe_name).resolve()
+    root_path = Path(settings.local_assets_dir).resolve()
+
+    if root_path not in target_path.parents or not target_path.exists() or not target_path.is_file():
+        raise HTTPException(status_code=404, detail='Archivo local no encontrado')
+
+    media_type = guess_type(safe_name)[0] or 'application/octet-stream'
+    return FileResponse(target_path, media_type=media_type, filename=safe_name)
 
 
 @app.get('/v1/config')

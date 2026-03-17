@@ -5,6 +5,7 @@
       document.querySelectorAll('.nav button[data-view]').forEach(btn => btn.onclick = () => activateView(btn.dataset.view));
 
       document.getElementById('assetKey').oninput = updateAssetPreview;
+      if (document.getElementById('assetSourceMode')) document.getElementById('assetSourceMode').addEventListener('change', syncAssetSourceModeUi);
       document.getElementById('btnRefreshOverview').onclick = refreshOverview;
       document.getElementById('btnSearchOffers').onclick = () => loadCatalogs(true);
       document.getElementById('btnRefreshCatalog').onclick = async () => { await loadCatalogs(false); };
@@ -145,6 +146,7 @@
       bindEvents();
       document.getElementById('btnArcgisLogout').onclick = arcgisLogout;
       applyPolicyMode();
+      if (typeof syncAssetSourceModeUi === 'function') syncAssetSourceModeUi();
       if (typeof applyAuthTypeForm === 'function') applyAuthTypeForm();
       if (typeof syncTransferModeUi === 'function') syncTransferModeUi();
       applySettings();
