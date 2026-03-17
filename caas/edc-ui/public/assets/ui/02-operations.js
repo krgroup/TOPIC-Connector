@@ -257,11 +257,31 @@
       document.getElementById('kpiTransfers').textContent = unwrap(tps).length;
     }
 
+    function getArcgisAccessTokenForPublish() {
+      try {
+        if (typeof getStoredArcgisToken === 'function') {
+          return (getStoredArcgisToken() || '').trim();
+        }
+      } catch {}
+      try {
+        return (sessionStorage.getItem('eitel.arcgis.access_token') || '').trim();
+      } catch {
+        return '';
+      }
+    }
+
+    function resolveAuthTokenForPublish(authType) {
+      if (authType === 'arcgis-login') {
+        return getArcgisAccessTokenForPublish();
+      }
+      return (document.getElementById('pubAuthToken')?.value || '').trim();
+    }
+
     function buildAuthHeaders(baseHeaders = {}) {
       const authType = document.getElementById('pubAuthType')?.value || 'none';
       const authHeader = (document.getElementById('pubAuthHeader')?.value || 'Authorization').trim();
       const authPrefix = (document.getElementById('pubAuthPrefix')?.value || '').trim();
-      const authToken = (document.getElementById('pubAuthToken')?.value || '').trim();
+      const authToken = resolveAuthTokenForPublish(authType);
       const authSecret = (document.getElementById('pubAuthSecret')?.value || '').trim();
       const headers = { ...baseHeaders };
 
@@ -309,15 +329,19 @@
       const tokenRow = document.getElementById('pubAuthTokenRow');
       const headerRow = document.getElementById('pubAuthHeaderRow');
       const tokenLabel = document.getElementById('pubAuthTokenLabel');
+      const tokenInput = document.getElementById('pubAuthToken');
       const headerInput = document.getElementById('pubAuthHeader');
       const prefixInput = document.getElementById('pubAuthPrefix');
+      const authSecretSelect = document.getElementById('pubAuthSecret');
 
-      if (!clientFields || !tokenRow || !headerRow || !tokenLabel || !headerInput || !prefixInput) return;
+      if (!clientFields || !tokenRow || !headerRow || !tokenLabel || !headerInput || !prefixInput || !tokenInput) return;
 
       if (authType === 'none') {
         clientFields.style.display = 'none';
         tokenRow.style.display = 'none';
         headerRow.style.display = 'none';
+        tokenInput.readOnly = false;
+        if (authSecretSelect) authSecretSelect.disabled = false;
       } else if (authType === 'oauth2') {
         clientFields.style.display = '';
         tokenRow.style.display = '';
@@ -325,6 +349,23 @@
         tokenLabel.textContent = 'Token temporal';
         headerInput.placeholder = 'Authorization';
         prefixInput.placeholder = 'Bearer ';
+        tokenInput.readOnly = false;
+        if (authSecretSelect) authSecretSelect.disabled = false;
+      } else if (authType === 'arcgis-login') {
+        clientFields.style.display = 'none';
+        tokenRow.style.display = '';
+        headerRow.style.display = '';
+        tokenLabel.textContent = 'Access token (login ArcGIS)';
+        if (!headerInput.value) headerInput.value = 'Authorization';
+        if (!prefixInput.value) prefixInput.value = 'Bearer ';
+        headerInput.placeholder = 'Authorization';
+        prefixInput.placeholder = 'Bearer ';
+        tokenInput.value = getArcgisAccessTokenForPublish();
+        tokenInput.readOnly = true;
+        if (authSecretSelect) {
+          authSecretSelect.value = '';
+          authSecretSelect.disabled = true;
+        }
       } else if (authType === 'apikey') {
         clientFields.style.display = 'none';
         tokenRow.style.display = '';
@@ -332,6 +373,8 @@
         tokenLabel.textContent = 'API token';
         headerInput.placeholder = 'X-API-Key';
         prefixInput.placeholder = '';
+        tokenInput.readOnly = false;
+        if (authSecretSelect) authSecretSelect.disabled = false;
       } else {
         clientFields.style.display = 'none';
         tokenRow.style.display = '';
@@ -339,6 +382,8 @@
         tokenLabel.textContent = 'Token';
         headerInput.placeholder = 'Authorization';
         prefixInput.placeholder = 'Bearer ';
+        tokenInput.readOnly = false;
+        if (authSecretSelect) authSecretSelect.disabled = false;
       }
 
       syncAuthHeadersJson();
@@ -479,7 +524,7 @@
       const id = document.getElementById('assetIdPreview').value;
 
       const authType = document.getElementById('pubAuthType')?.value || 'none';
-      const authToken = (document.getElementById('pubAuthToken')?.value || '').trim();
+      const authToken = resolveAuthTokenForPublish(authType);
       const authHeader = (document.getElementById('pubAuthHeader')?.value || '').trim();
       const authClientId = (document.getElementById('pubAuthClientId')?.value || '').trim();
       const authClientSecret = (document.getElementById('pubAuthClientSecret')?.value || '').trim();
@@ -490,7 +535,10 @@
           return { status: 400 };
         }
         if (!authToken) {
-          writeOut({ status: 400, error: 'El token/api token es obligatorio para el tipo de autenticación seleccionado.' });
+          const msg = authType === 'arcgis-login'
+            ? 'No se detectó access token de ArcGIS. Inicia sesión de nuevo y vuelve a intentarlo.'
+            : 'El token/api token es obligatorio para el tipo de autenticación seleccionado.';
+          writeOut({ status: 400, error: msg });
           return { status: 400 };
         }
         if (authType === 'oauth2' && (!authClientId || !authClientSecret)) {
@@ -514,7 +562,8 @@
           'eitel:authSecret': document.getElementById('pubAuthSecret')?.value || '',
           'eitel:authClientId': document.getElementById('pubAuthClientId')?.value.trim() || '',
           'eitel:authClientSecret': document.getElementById('pubAuthClientSecret')?.value.trim() || '',
-          'eitel:authToken': document.getElementById('pubAuthToken')?.value.trim() || ''
+          'eitel:authToken': authType === 'arcgis-login' ? '' : (document.getElementById('pubAuthToken')?.value.trim() || ''),
+          'eitel:authTokenSource': authType === 'arcgis-login' ? 'arcgis-login' : ''
         },
         dataAddress: {
           '@type': 'DataAddress',

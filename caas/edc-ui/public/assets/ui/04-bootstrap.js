@@ -147,6 +147,7 @@
           document.getElementById('badge').textContent = `${role} · ${authState.username} · ${getApiBaseUrl() || 'management api'}`;
           document.getElementById('btnArcgisLogout').style.display = 'inline-flex';
         }
+        if (typeof applyAuthTypeForm === 'function') applyAuthTypeForm();
         refreshOverview();
         loadCatalogs(false);
         listSecrets(false);
