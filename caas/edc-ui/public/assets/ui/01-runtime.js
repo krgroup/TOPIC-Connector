@@ -91,7 +91,26 @@
       return raw.replace(/\/+$/, '');
     }
 
-    const getApiBaseUrl = () => normalizeManagementApiBaseUrl(settings.apiBaseUrl || cfg.managementApiUrl || '/api/management');
+    function buildSafeManagementApiBaseUrl() {
+      const configured = normalizeManagementApiBaseUrl(cfg.managementApiUrl || '');
+      if (configured.includes('/api/management')) return configured;
+
+      const origin = window.location.origin;
+      const pathParts = (window.location.pathname || '/').split('/').filter(Boolean);
+      const pathPrefix = pathParts[0] || '';
+      if (pathPrefix) return `${origin}/${pathPrefix}/api/management`;
+
+      const connectorPrefix = String(cfg.connectorName || '').trim().toLowerCase();
+      if (connectorPrefix) return `${origin}/${connectorPrefix}/api/management`;
+
+      return `${origin}/api/management`;
+    }
+
+    const getApiBaseUrl = () => {
+      const persisted = normalizeManagementApiBaseUrl(settings.apiBaseUrl || '');
+      if (persisted.includes('/api/management')) return persisted;
+      return buildSafeManagementApiBaseUrl();
+    };
     const getApiKey = () => (settings.apiKeyOverride || cfg.apiKey || '').trim();
 
     const i18n = {
