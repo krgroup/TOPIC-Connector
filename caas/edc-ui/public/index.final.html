@@ -315,9 +315,10 @@
             <div class="row" style="margin-top:8px">
               <button class="primary" id="btnStartTransfer" data-i18n="transfer.start">Iniciar transferencia</button>
               <button class="ghost" id="btnListTransfers" data-i18n="transfer.list">Listar transferencias</button>
+              <button class="ghost" onclick="window.checkDataplanes()">⚙️ Dataplanes</button>
             </div>
             <table>
-              <thead><tr><th data-i18n="table.transfer">Transferencia</th><th data-i18n="table.state">Estado</th><th data-i18n="table.contract">Contrato</th><th></th></tr></thead>
+              <thead><tr><th data-i18n="table.transfer">Transferencia</th><th data-i18n="table.state">Estado</th><th data-i18n="table.contract">Contrato</th><th style="min-width:200px"></th></tr></thead>
               <tbody id="tblTransfers"></tbody>
             </table>
           </section>
@@ -326,7 +327,8 @@
             <ol>
               <li>Selecciona contrato desde el desplegable o pega el `agreementId` real.</li>
               <li>Completa `Destination URL` del receptor en produccion.</li>
-              <li>Inicia la transferencia y monitorea su estado hasta `COMPLETED`.</li>
+              <li>Inicia la transferencia. Si se queda en <strong>STARTED</strong>, pulsa ⚙️ Dataplanes para verificar que hay un motor activo.</li>
+              <li>Si sigue atascada, pulsa <strong>Terminar</strong> en la fila y republica el asset con el token renovado antes de reintentar.</li>
             </ol>
           </section>
         </div>

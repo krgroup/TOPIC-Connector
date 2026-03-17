@@ -1217,11 +1217,16 @@
           status: r.status,
           transferId,
           contractId,
-          message: 'La transferencia se ha enviado. Se refresca la lista automáticamente.'
+          message: 'La transferencia se ha enviado. Se refresca la lista automáticamente. Monitorizando estado...'
         });
+        await listTransfers();
+        if (transferId) {
+          // Iniciar polling de estado hasta que la transferencia sea terminal
+          pollTransferUntilDone(transferId);
+        }
+      } else {
+        await listTransfers();
       }
-
-      await listTransfers();
       } finally {
         transferStartInFlight = false;
         if (startBtn) {
@@ -1230,6 +1235,18 @@
         }
       }
     }
+
+    const TRANSFER_STATE_COLORS = {
+      INITIAL: 'color:#888',
+      PROVISIONING: 'color:#f5a623',
+      PROVISIONED: 'color:#f5a623',
+      REQUESTED: 'color:#4a90e2',
+      STARTED: 'color:#2ac37a;font-weight:bold',
+      SUSPENDED: 'color:#e67e22',
+      COMPLETED: 'color:#27ae60;font-weight:bold',
+      TERMINATED: 'color:#c0392b;font-weight:bold',
+      FAILED: 'color:#c0392b;font-weight:bold',
+    };
 
     async function listTransfers() {
       const r = await callApi('POST', '/v3/transferprocesses/request', q());
@@ -1241,15 +1258,21 @@
         tbody.innerHTML = rows.map((t, i) => {
           const id = t['@id'] || t.id || '';
           const st = normalizeTransferState(t.state || t['edc:state'] || '-');
+          const style = TRANSFER_STATE_COLORS[st] || '';
           const contract = t.contractId || t['edc:contractId'] || '';
+          const errorDetail = t.errorDetail || t['edc:errorDetail'] || '';
+          const errorTip = errorDetail ? ` title="${errorDetail.replace(/"/g, '&quot;')}"` : '';
+          const isTerminal = isTransferTerminalState(t.state || t['edc:state'] || '');
           return `
             <tr>
               <td class="title-cell" title="${id}">Transferencia ${i + 1}</td>
-              <td>${st}</td>
+              <td><span style="${style}"${errorTip}>${st}${errorDetail ? ' ⚠️' : ''}</span></td>
               <td class="title-cell" title="${contract}">${clean(contract)}</td>
               <td>
                 <button class="ghost" onclick="window.showTransferDetail(${i})">Detalle</button>
-                <button class="ghost" onclick="window.checkTransfer('${id.replace(/'/g, "\\'")}')">Ver estado</button>
+                <button class="ghost" onclick="window.checkTransfer('${id.replace(/'/g, "\\'")}')">Estado</button>
+                <button class="ghost" onclick="window.retryTransferMonitor('${id.replace(/'/g, "\\'")}')">↺ Monitor</button>
+                ${!isTerminal ? `<button class="danger" onclick="window.terminateTransfer('${id.replace(/'/g, "\\'")}')">Terminar</button>` : ''}
               </td>
             </tr>
           `;
@@ -1260,9 +1283,127 @@
     }
 
     async function checkTransfer(transferId) {
-      const r = await callApi('GET', `/v3/transferprocesses/${encodeURIComponent(transferId)}/state`);
+      // Obtener detalle completo (no solo estado) para ver errorDetail
+      const full = await callApi('GET', `/v3/transferprocesses/${encodeURIComponent(transferId)}`);
+      const st = normalizeTransferState(full?.data?.state || full?.data?.['edc:state'] || '-');
+      const errorDetail = full?.data?.errorDetail || full?.data?.['edc:errorDetail'] || '';
+      showInfoPopup(`Estado: ${st}`, {
+        transferId,
+        state: st,
+        errorDetail: errorDetail || '(sin detalle)',
+        type: full?.data?.type || full?.data?.['edc:type'] || '',
+        assetId: full?.data?.assetId || full?.data?.['edc:assetId'] || '',
+        contractId: full?.data?.contractId || full?.data?.['edc:contractId'] || '',
+        dataDestination: full?.data?.dataDestination || full?.data?.['edc:dataDestination'] || {},
+        stateTimestamp: fmtDate(full?.data?.stateTimestamp || full?.data?.['edc:stateTimestamp'] || ''),
+        dataplaneMetadata: full?.data?.['edc:dataplaneMetadata'] || full?.data?.dataplaneMetadata || {},
+        diagnosisHint: st === 'STARTED'
+          ? 'STARTED significa que el dataplane arrancó la transferencia pero no completó el PUSH. Causas más comunes: (1) token ArcGIS expirado en el asset origen, (2) webhook.site/destino no alcanzable desde dentro del contenedor Docker del servidor, (3) URL origen inaccesible desde el servidor.'
+          : ''
+      });
+      writeOut(full);
+    }
+
+    async function terminateTransfer(transferId) {
+      if (!transferId) return;
+      const r = await callApi('POST', `/v3/transferprocesses/${encodeURIComponent(transferId)}/terminate`, JSON.stringify({
+        '@context': { edc: 'https://w3id.org/edc/v0.0.1/ns/' },
+        reason: 'Terminado manualmente desde la UI'
+      }));
+      if (r.status >= 200 && r.status < 300) {
+        showInfoPopup('Transferencia terminada', { transferId, message: 'La transferencia fue terminada. Ahora puedes iniciar una nueva.' });
+      } else {
+        showInfoPopup('Error al terminar', { transferId, status: r.status, detail: r.data });
+      }
+      writeOut(r);
+      await listTransfers();
+    }
+    window.terminateTransfer = terminateTransfer;
+
+    async function checkDataplanes() {
+      const r = await callApi('GET', '/v3/dataplanes');
+      const planes = Array.isArray(r?.data) ? r.data : [];
+      if (!planes.length) {
+        showInfoPopup('Sin Dataplanes registrados ⚠️', {
+          message: 'No hay ningún dataplane registrado en este conector. Eso explica por qué las transferencias se quedan en STARTED: no hay motor de transferencia activo.',
+          hint: 'Necesitas añadir un componente EDC Data Plane en docker-compose o que el conector tenga embedded dataplane activado. Revisa la configuración del runtime.'
+        });
+      } else {
+        showInfoPopup(`Dataplanes (${planes.length})`, planes.map(p => ({
+          id: p['@id'] || p.id,
+          url: p.url || p['edc:url'] || '',
+          state: p.state || p['edc:state'] || '',
+          allowedSourceTypes: p.allowedSourceTypes || p['edc:allowedSourceTypes'] || [],
+          allowedTransferTypes: p.allowedTransferTypes || p['edc:allowedTransferTypes'] || []
+        })));
+      }
       writeOut(r);
     }
+    window.checkDataplanes = checkDataplanes;
+
+    const _transferPollingActive = new Set();
+
+    async function pollTransferUntilDone(transferId, maxWaitMs = 120000) {
+      if (_transferPollingActive.has(transferId)) return;
+      _transferPollingActive.add(transferId);
+      const started = Date.now();
+      const intervals = [2000, 3000, 5000, 5000, 10000];
+      let step = 0;
+
+      try {
+        while (true) {
+          const elapsed = Date.now() - started;
+          if (elapsed > maxWaitMs) {
+            showInfoPopup('Transferencia estancada ⚠️', {
+              message: `La transferencia lleva más de ${Math.round(maxWaitMs / 1000)}s en estado no terminal. Posibles causas: el origen no es accesible desde el conector (comprueba que la URL y autenticación son válidas desde el servidor, no solo desde el navegador), o el destino (sinkBaseUrl) no acepta la conexión del conector. El estado quedó en STARTED porque el conector no pudo completar el PUSH.`,
+              transferId,
+              elapsed: `${Math.round(elapsed / 1000)}s`,
+              hint: 'Usa el botón Detalle para ver errorDetail. Verifica que el sinkBaseUrl (webhook.site, etc.) sea accesible desde dentro del contenedor Docker del conector.'
+            });
+            writeOut({ warning: 'Transfer stalled', transferId, elapsed });
+            break;
+          }
+
+          const waitMs = intervals[Math.min(step, intervals.length - 1)];
+          await new Promise(res => setTimeout(res, waitMs));
+          step++;
+
+          const r = await callApi('GET', `/v3/transferprocesses/${encodeURIComponent(transferId)}/state`, undefined, { silent: true });
+          const stateRaw = r?.data?.state || r?.data?.['edc:state'] || '';
+          const st = normalizeTransferState(stateRaw);
+
+          await listTransfers();
+
+          if (st === 'COMPLETED') {
+            showInfoPopup('Transferencia completada ✅', {
+              message: 'La transferencia finalizó con éxito. Revisa webhook.site (o tu destino) para ver los datos recibidos.',
+              transferId
+            });
+            writeOut({ info: 'Transfer COMPLETED', transferId });
+            break;
+          }
+          if (st === 'TERMINATED' || st === 'FAILED') {
+            const err = r?.data?.errorDetail || r?.data?.['edc:errorDetail'] || 'Sin detalle de error.';
+            showInfoPopup('Transferencia terminada con error ❌', {
+              message: `La transferencia terminó en estado ${st}. Revisa el errorDetail.`,
+              transferId,
+              errorDetail: err,
+              hint: 'Causas comunes: token de ArcGIS expirado, URL origen errónea, host destino inaccesible desde el contenedor Docker, o política rechazada.'
+            });
+            writeOut({ error: `Transfer ${st}`, transferId, errorDetail: err });
+            break;
+          }
+        }
+      } finally {
+        _transferPollingActive.delete(transferId);
+      }
+    }
+
+    window.retryTransferMonitor = (transferId) => {
+      if (!transferId) return;
+      pollTransferUntilDone(transferId, 120000);
+      writeOut({ info: `Monitoreando transferencia ${transferId}...` });
+    };
 
     async function checkDummy() {
       try {
