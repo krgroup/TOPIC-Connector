@@ -276,7 +276,7 @@
         const body = new URLSearchParams({
           f: 'json',
           client: 'referer',
-          referer: window.location.origin,
+          referer: window.location.href,
           expiration: '20160'
         });
         const res = await fetch(`${arcgis.portalUrl}/sharing/rest/generateToken`, {
@@ -556,7 +556,7 @@
       const id = document.getElementById('assetIdPreview').value;
 
       const authType = document.getElementById('pubAuthType')?.value || 'none';
-      const authToken = authType === 'arcgis-login'
+      let authToken = authType === 'arcgis-login'
         ? await resolveArcgisTokenForPublish()
         : resolveAuthTokenForPublish(authType);
       const authHeader = (document.getElementById('pubAuthHeader')?.value || '').trim();
@@ -569,11 +569,21 @@
           return { status: 400 };
         }
         if (!authToken) {
+          if (authType === 'arcgis-login' && typeof ensureArcgisLogin === 'function') {
+            // Re-validate ArcGIS login and retry token retrieval one more time.
+            await ensureArcgisLogin();
+            authToken = await resolveArcgisTokenForPublish();
+          }
+
+          if (authToken) {
+            // continue with publish
+          } else {
           const msg = authType === 'arcgis-login'
             ? 'No se detectó access token de ArcGIS. Inicia sesión de nuevo y vuelve a intentarlo.'
             : 'El token/api token es obligatorio para el tipo de autenticación seleccionado.';
           writeOut({ status: 400, error: msg });
           return { status: 400 };
+          }
         }
         if (authType === 'oauth2' && (!authClientId || !authClientSecret)) {
           writeOut({ status: 400, error: 'clientId y clientSecret son obligatorios para OAuth2.' });
