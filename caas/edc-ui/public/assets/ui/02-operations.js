@@ -645,7 +645,7 @@
         return { status: 404, error: 'No se pudo resolver el asset asociado al contrato seleccionado.' };
       }
 
-      const assetsResp = await callApi('POST', '/v3/assets/request', q(), { retries: 0 });
+      const assetsResp = await callApi('POST', '/v3/assets/request', q(), { retries: 0, timeoutMs: 5000 });
       const assets = unwrap(assetsResp);
       const asset = assets.find(a => (a['@id'] || a.id || '') === assetId);
       if (!asset) {
@@ -878,50 +878,15 @@
         assetId,
       });
 
-      const finished = await waitTransferToFinish(transferId, 30000);
-      if (!finished.ok) {
-        if (finished.state === 'TIMEOUT') {
-          return {
-            status: 202,
-            pendingRemoteTransfer: true,
-            transferId,
-            contractId,
-            assetId,
-            message: 'Transferencia iniciada. Sigue en progreso; se continuará en segundo plano.',
-          };
-        }
-        return {
-          status: 502,
-          error: 'La transferencia remota no finalizó correctamente.',
-          transferId,
-          state: finished.state,
-          detail: finished.error,
-        };
-      }
-
-      const latest = await getLatestDownloadSinkRecord(contractId);
-      if (!latest) {
-        return {
-          status: 404,
-          error: 'La transferencia terminó pero no se encontró archivo en el sink local.',
-          transferId,
-        };
-      }
-
-      const relativePublicPath = String(latest.publicPath || '').replace(/^\/local-assets\/?/, '');
-      const fileUrl = `${window.location.origin}${getUiPrefix()}/local-assets/${relativePublicPath}`;
-      triggerBrowserDownload(fileUrl, latest.filename || 'download.bin');
-
+      // No bloquear la UI: continuar en segundo plano y devolver control inmediato.
+      monitorRemoteDownloadAndFetch(contractId, transferId, assetId);
       return {
-        status: 200,
-        downloaded: true,
-        remoteTransfer: true,
+        status: 202,
+        pendingRemoteTransfer: true,
         transferId,
         contractId,
         assetId,
-        filename: latest.filename,
-        bytes: latest.bytes,
-        sourceUrl: fileUrl,
+        message: 'Transferencia remota iniciada en segundo plano. El archivo se descargará al completarse.',
       };
     }
 
@@ -1768,9 +1733,6 @@
         // Si el asset no existe localmente (contrato remoto), usar transferencia EDC al sink local.
         if (downloadResp?.status === 404) {
           downloadResp = await downloadRemoteAssetViaTransfer(contractId, agreementAssetId);
-          if (downloadResp?.pendingRemoteTransfer && downloadResp?.transferId) {
-            monitorRemoteDownloadAndFetch(contractId, downloadResp.transferId, agreementAssetId);
-          }
         }
         const localTransfer = addLocalTransferRecord(buildLocalTransferRecord(downloadResp));
         writeOut(downloadResp);
