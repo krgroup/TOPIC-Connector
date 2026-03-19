@@ -9,6 +9,15 @@
       document.getElementById('btnRefreshOverview').onclick = refreshOverview;
       document.getElementById('btnSearchOffers').onclick = () => loadCatalogs(true);
       document.getElementById('btnRefreshCatalog').onclick = async () => { await loadCatalogs(false); };
+      
+      // Actualizar URL DSP dinámicamente cuando cambia el connector ID
+      document.getElementById('searchConnectorId').addEventListener('input', (e) => {
+        const connectorId = (e.target.value || 'provider').trim() || 'provider';
+        const dspUrl = buildDspUrl(connectorId);
+        document.getElementById('resolvedAddress').value = dspUrl;
+        document.getElementById('transferAddress').value = dspUrl;
+      });
+      
       document.getElementById('catalogAssetId').addEventListener('change', () => {
         const accept = document.getElementById('catalogAcceptTerms');
         if (accept) accept.checked = false;
@@ -144,6 +153,12 @@
       updateAssetPreview();
       loadSettings();
       bindEvents();
+      
+      // Inicializar URL DSP con el valor por defecto
+      const initialConnectorId = (document.getElementById('searchConnectorId').value || 'provider').trim() || 'provider';
+      document.getElementById('resolvedAddress').value = buildDspUrl(initialConnectorId);
+      document.getElementById('transferAddress').value = buildDspUrl(initialConnectorId);
+      
       document.getElementById('btnArcgisLogout').onclick = arcgisLogout;
       applyPolicyMode();
       if (typeof syncAssetSourceModeUi === 'function') syncAssetSourceModeUi();

@@ -1219,17 +1219,57 @@
       `).join('');
     }
 
+    // Construir URL del DSP dinámicamente basada en el connector ID
+    function buildDspUrl(connectorId) {
+      if (!connectorId) connectorId = 'provider';
+      
+      // Si es una URL completa, devolverla tal cual
+      if (connectorId.startsWith('http://') || connectorId.startsWith('https://')) {
+        return connectorId;
+      }
+      
+      const connectorIdLower = connectorId.toLowerCase();
+      
+      // Conectores locales de desarrollo
+      if (connectorIdLower === 'provider') {
+        return 'http://provider-connector:19103/api/v1/dsp/2025-1';
+      }
+      if (connectorIdLower === 'consumer') {
+        return 'http://consumer-connector:19203/api/v1/dsp/2025-1';
+      }
+      
+      // Conectores en producción
+      // Obtener la base URL del host actual para conectores remotos
+      const currentPathname = window.location.pathname || '/';
+      const isProduction = window.location.hostname !== 'localhost' && !window.location.hostname.startsWith('127.');
+      
+      if (connectorIdLower === 'conectoruc3m') {
+        // Si estamos en producción, usar URL relativa, sino usar PROD_DSP_URL
+        if (isProduction) {
+          return `/conectoruc3m/api/v1/dsp/`;
+        }
+        return PROD_DSP_URL;
+      }
+      
+      const connectorAliasLower = connectorIdLower.replace(/^conector/i, '');
+      
+      // Para otros conectores remotos (conocidos), construir URL relativa
+      if (isProduction && connectorIdLower.startsWith('conector')) {
+        return `/${connectorIdLower}/api/v1/dsp/`;
+      }
+      
+      // Para nombres simples de conectores remotos (sólo el nombre sin 'conector-')
+      if (isProduction && (connectorIdLower === 'fuenlabrada' || connectorIdLower === 'uc3m')) {
+        return `/conector${connectorIdLower}/api/v1/dsp/`;
+      }
+      
+      // Fallback: intentar construcción local
+      return `http://${connectorId}-connector:19103/api/v1/dsp/2025-1`;
+    }
+
     async function loadCatalogs(showOutput = true) {
       const connectorId = (document.getElementById('searchConnectorId').value || 'provider').trim() || 'provider';
-      const address = connectorId.startsWith('http://') || connectorId.startsWith('https://')
-        ? connectorId
-        : connectorId === 'provider'
-        ? 'http://provider-connector:19103/api/v1/dsp/2025-1'
-        : connectorId === 'consumer'
-          ? 'http://consumer-connector:19203/api/v1/dsp/2025-1'
-          : connectorId === 'conectoruc3m'
-            ? PROD_DSP_URL
-            : `http://${connectorId}-connector:19103/api/v1/dsp/2025-1`;
+      const address = buildDspUrl(connectorId);
       document.getElementById('resolvedAddress').value = address;
       document.getElementById('transferAddress').value = address;
 
