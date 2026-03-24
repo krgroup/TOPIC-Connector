@@ -13,6 +13,7 @@
     const _remoteLocalDownloadInFlightByContract = new Set();
     const localTransferStorageKey = `eitel.ui.localTransfers.${connectorName}`;
     const hiddenTransferStorageKey = `eitel.ui.hiddenTransfers.${connectorName}`;
+    const agreementSourceHints = new Map();
 
     function normalizeTransferState(raw) {
       if (raw === undefined || raw === null) return '-';
@@ -934,6 +935,89 @@
       anchor.remove();
     }
 
+    function collectUrlCandidatesFromObject(obj, out = []) {
+      if (!obj) return out;
+      if (Array.isArray(obj)) {
+        obj.forEach(item => collectUrlCandidatesFromObject(item, out));
+        return out;
+      }
+      if (typeof obj !== 'object') return out;
+
+      Object.entries(obj).forEach(([k, v]) => {
+        if (typeof v === 'string' && /^https?:\/\//i.test(v)) {
+          const key = String(k || '').toLowerCase();
+          if (
+            key.includes('endpointurl') ||
+            key.includes('download') ||
+            key.includes('publicurl') ||
+            key.includes('baseurl') ||
+            key.includes('accessurl') ||
+            key.includes('localassetpublicurl') ||
+            key.includes('url')
+          ) {
+            out.push(v);
+          }
+        } else if (typeof v === 'object' && v) {
+          collectUrlCandidatesFromObject(v, out);
+        }
+      });
+      return out;
+    }
+
+    function pickBestSourceUrl(urls = []) {
+      const unique = [...new Set((Array.isArray(urls) ? urls : []).filter(Boolean))];
+      const filtered = unique.filter(u => {
+        const s = String(u).toLowerCase();
+        return !s.includes('/api/management') && !s.includes('/api/v1/dsp');
+      });
+      return filtered[0] || unique[0] || '';
+    }
+
+    async function downloadFromSourceHint(contractId, assetId, sourceUrl) {
+      const url = String(sourceUrl || '').trim();
+      if (!url) return { status: 404, error: 'Sin URL de origen alternativa para descarga directa.', contractId, assetId };
+      try {
+        const response = await fetch(url, { method: 'GET', credentials: 'include' });
+        const contentType = response.headers.get('content-type') || 'application/octet-stream';
+        if (!response.ok) {
+          const detail = await response.text();
+          return {
+            status: response.status,
+            error: 'La descarga directa desde catálogo devolvió error HTTP.',
+            contractId,
+            assetId,
+            sourceUrl: url,
+            detail: String(detail || '').slice(0, 1000),
+          };
+        }
+        const blob = await response.blob();
+        const filename = inferDownloadFilename(assetId, url, contentType, response.headers.get('content-disposition') || '');
+        const objectUrl = URL.createObjectURL(blob);
+        triggerBrowserDownload(objectUrl, filename);
+        setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+        return {
+          status: 200,
+          downloaded: true,
+          contractId,
+          assetId,
+          sourceUrl: url,
+          filename,
+          contentType,
+          bytes: blob.size,
+          via: 'catalog-source-hint',
+        };
+      } catch (error) {
+        return {
+          status: 500,
+          error: 'No se pudo descargar desde URL alternativa de catálogo.',
+          contractId,
+          assetId,
+          sourceUrl: url,
+          detail: String(error),
+        };
+      }
+    }
+
     async function monitorRemoteDownloadAndFetch(contractId, transferId, assetId) {
       try {
         const started = Date.now();
@@ -1633,6 +1717,7 @@
         const policiesRaw = d?.['odrl:hasPolicy'] || d?.hasPolicy || [];
         const policies = Array.isArray(policiesRaw) ? policiesRaw : [policiesRaw];
         const datasetId = d?.['@id'] || d?.id || '';
+        const sourceHintUrl = pickBestSourceUrl(collectUrlCandidatesFromObject(d));
 
         return policies.map(pol => {
           const permsRaw = pol?.['odrl:permission'] || pol?.permission || [];
@@ -1646,6 +1731,7 @@
             assigner: pol?.assigner || pol?.['odrl:assigner'] || connectorId,
             policySummary: summarizePolicyTerms(pol),
             policyRaw: pol,
+            sourceHintUrl,
           };
         });
       }).filter(x => x.offerId || x.assetId);
@@ -1792,6 +1878,10 @@
         const assetId = createdAgreement.assetId || createdAgreement['edc:assetId'] || selected.assetId;
         const providerId = createdAgreement.providerId || createdAgreement['edc:providerId'] || selected.assigner;
         const consumerId = createdAgreement.consumerId || createdAgreement['edc:consumerId'] || connectorName;
+        if (agreementId) {
+          const hint = String(selected.sourceHintUrl || '').trim();
+          if (hint) agreementSourceHints.set(agreementId, hint);
+        }
         showInfoPopup('Aviso', `Contrato concretado correctamente.\nAgreement ID: ${agreementId}\nNegotiation ID: ${negotiationId}\nAsset: ${assetId}\nProvider: ${providerId}\nConsumer: ${consumerId}`, {
           plainText: true,
           actionLabel: 'Ir al contrato',
@@ -1943,6 +2033,15 @@
 
       if (transferMode === 'local-download') {
         let downloadResp = await downloadAssetLocally(contractId, agreementAssetId);
+        if (downloadResp?.status === 404) {
+          const hintedUrl = agreementSourceHints.get(contractId) || '';
+          if (hintedUrl) {
+            const hintedResp = await downloadFromSourceHint(contractId, agreementAssetId, hintedUrl);
+            if (hintedResp?.status >= 200 && hintedResp?.status < 300) {
+              downloadResp = hintedResp;
+            }
+          }
+        }
         // Si el asset no existe localmente (contrato remoto), usar transferencia EDC al sink local.
         if (downloadResp?.status === 404) {
           downloadResp = await downloadRemoteAssetViaTransfer(contractId, agreementAssetId, transferParty);
