@@ -47,6 +47,20 @@
       return 'assets/eitel-logo-brand.png';
     }
 
+    function isDefaultAssetImage(imageUrl) {
+      const txt = String(imageUrl || '').trim().toLowerCase();
+      return txt.endsWith('/assets/eitel-logo-brand.png') || txt === 'assets/eitel-logo-brand.png';
+    }
+
+    function prettyConnectorLabel(rawConnector) {
+      const txt = String(rawConnector || '').trim();
+      if (!txt) return 'CONNECTOR';
+      const lower = txt.toLowerCase();
+      if (lower.includes('uc3m')) return 'UC3M';
+      if (lower.includes('fuenlabrada')) return 'FUENLABRADA';
+      return txt.replace(/^conector/i, '').trim().toUpperCase() || 'CONNECTOR';
+    }
+
     function extractDatasetMetadata(dataset) {
       const d = dataset || {};
       const props = d?.properties || d?.['dct:properties'] || d?.['edc:properties'] || {};
@@ -613,12 +627,13 @@
       wrap.innerHTML = filtered.map(({ row, idx }) => {
         const title = htmlEscape(safeText(row.assetTitle, clean(row.assetId)));
         const connector = htmlEscape(safeText(row.connectorId, row.assigner || '-'));
-        const connectorBadge = htmlEscape(safeText(row.connectorId, row.assigner || '-').replace(/^conector/i, '').trim() || 'connector');
+        const connectorBadge = htmlEscape(prettyConnectorLabel(safeText(row.connectorId, row.assigner || '-')));
         const desc = htmlEscape(safeText(row.assetDescription, 'Sin descripción publicada.'));
         const image = resolveAssetImageUrl(row.assetImageUrl);
+        const defaultImageClass = isDefaultAssetImage(image) ? ' is-default' : '';
         const keywords = Array.isArray(row.assetKeywords) ? row.assetKeywords.slice(0, 8) : [];
         const delayMs = Math.min(idx * 55, 550);
-        const media = `<div class="asset-card-media"><img src="${htmlEscape(image)}" alt="Imagen del asset ${title}" /><span class="asset-card-badge">${connectorBadge}</span><div class="asset-card-media-overlay"><span class="asset-card-media-title">${title}</span></div></div>`;
+        const media = `<div class="asset-card-media${defaultImageClass}"><img src="${htmlEscape(image)}" alt="Imagen del asset ${title}" /><span class="asset-card-badge">${connectorBadge}</span><div class="asset-card-media-overlay"><span class="asset-card-media-title">${title}</span></div></div>`;
         const chips = keywords.length
           ? `<div class="asset-card-keywords">${keywords.map(k => `<span class="asset-chip">${htmlEscape(k)}</span>`).join('')}</div>`
           : '<div class="asset-card-meta">Sin keywords</div>';
@@ -722,8 +737,9 @@
         const desc = htmlEscape(safeText(row.description, 'Sin descripción.'));
         const id = htmlEscape(row.id || '');
         const image = resolveAssetImageUrl(row.imageUrl);
+        const defaultImageClass = isDefaultAssetImage(image) ? ' is-default' : '';
         const delayMs = Math.min(idx * 40, 480);
-        const media = `<div class="asset-card-media"><img src="${htmlEscape(image)}" alt="Imagen del asset ${title}" /><span class="asset-card-badge">MI ASSET</span><div class="asset-card-media-overlay"><span class="asset-card-media-title">${title}</span></div></div>`;
+        const media = `<div class="asset-card-media${defaultImageClass}"><img src="${htmlEscape(image)}" alt="Imagen del asset ${title}" /><span class="asset-card-badge">MI ASSET</span><div class="asset-card-media-overlay"><span class="asset-card-media-title">${title}</span></div></div>`;
         const chips = row.keywords.length
           ? `<div class="asset-card-keywords">${row.keywords.slice(0, 8).map(k => `<span class="asset-chip">${htmlEscape(k)}</span>`).join('')}</div>`
           : '<div class="asset-card-meta">Sin keywords</div>';
