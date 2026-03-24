@@ -585,32 +585,39 @@
 
       if (!rows.length || !filtered.length) {
         wrap.innerHTML = '<div class="card" style="box-shadow:none"><p class="muted" style="margin:0">No hay assets para mostrar con el filtro actual.</p></div>';
+        const contractBox = document.getElementById('catalogContractBox');
+        if (contractBox) contractBox.style.display = 'none';
         return;
       }
 
       wrap.innerHTML = filtered.map(({ row, idx }) => {
         const title = htmlEscape(safeText(row.assetTitle, clean(row.assetId)));
         const connector = htmlEscape(safeText(row.connectorId, row.assigner || '-'));
+        const connectorBadge = htmlEscape(safeText(row.connectorId, row.assigner || '-').replace(/^conector/i, '').trim() || 'connector');
         const desc = htmlEscape(safeText(row.assetDescription, 'Sin descripción publicada.'));
         const image = String(row.assetImageUrl || '').trim();
         const keywords = Array.isArray(row.assetKeywords) ? row.assetKeywords.slice(0, 8) : [];
+        const delayMs = Math.min(idx * 55, 550);
         const media = image
-          ? `<div class="asset-card-media"><img src="${htmlEscape(image)}" alt="Imagen del asset ${title}" /></div>`
-          : '<div class="asset-card-media">SIN IMAGEN</div>';
+          ? `<div class="asset-card-media"><img src="${htmlEscape(image)}" alt="Imagen del asset ${title}" /><span class="asset-card-badge">${connectorBadge}</span><div class="asset-card-media-overlay"><span class="asset-card-media-title">${title}</span></div></div>`
+          : `<div class="asset-card-media">SIN IMAGEN<span class="asset-card-badge">${connectorBadge}</span><div class="asset-card-media-overlay"><span class="asset-card-media-title">${title}</span></div></div>`;
         const chips = keywords.length
           ? `<div class="asset-card-keywords">${keywords.map(k => `<span class="asset-chip">${htmlEscape(k)}</span>`).join('')}</div>`
           : '<div class="asset-card-meta">Sin keywords</div>';
 
         return `
-          <article class="asset-card">
+          <article class="asset-card" style="--delay:${delayMs}ms">
             ${media}
             <div class="asset-card-body">
               <div class="asset-card-title">${title}</div>
-              <div class="asset-card-meta">Conector: ${connector}</div>
-              <div class="asset-card-desc">${desc}</div>
-              ${chips}
-              <div class="row" style="margin-top:auto">
-                <button class="primary" onclick="window.useCatalogAssetByIndex(${idx})">Seleccionar</button>
+              <div class="asset-card-meta">${connector}</div>
+              <details>
+                <summary>Mas informacion</summary>
+                <div class="asset-card-desc">${desc}</div>
+                ${chips}
+              </details>
+              <div class="row">
+                <button class="primary" onclick="window.useCatalogAssetByIndex(${idx})">Ver y contratar</button>
               </div>
             </div>
           </article>
@@ -629,6 +636,9 @@
       const selected = Number.isInteger(idx) && idx >= 0 ? state.catalogRows[idx] : null;
       if (terms) terms.value = selected?.policySummary || '';
       if (policyJsonLd) policyJsonLd.value = selected ? buildPolicyDcatJsonLd(selected) : '';
+
+      const contractBox = document.getElementById('catalogContractBox');
+      if (contractBox) contractBox.style.display = selected ? 'block' : 'none';
 
       const selectedConnector = document.getElementById('catalogSelectedConnector');
       if (selectedConnector) selectedConnector.value = selected?.connectorId || '';
@@ -1837,24 +1847,6 @@
       await refreshOverview();
     }
 
-    function renderCatalogRows(targetId, rows, withUseButton = false) {
-      const tbody = document.getElementById(targetId);
-      if (!tbody) return;
-      if (!rows.length) {
-        const colspan = withUseButton ? 4 : 3;
-        tbody.innerHTML = `<tr><td colspan="${colspan}" class="muted">No hay resultados.</td></tr>`;
-        return;
-      }
-      tbody.innerHTML = rows.map((r, i) => `
-        <tr>
-          <td class="title-cell" title="${r.offerId}">Oferta ${i + 1} · ${clean(r.offerId)}</td>
-          <td class="title-cell" title="${r.assetId}">${safeText(r.assetTitle, clean(r.assetId))}</td>
-          <td>${safeText(r.connectorId, r.assigner || '-')}</td>
-          ${withUseButton ? `<td><button class="ghost" onclick="window.useCatalogAssetByIndex(${i})">Usar</button></td>` : `<td class="title-cell" title="${(r.policySummary || '').replace(/"/g, '&quot;')}">${r.policySummary || '-'}</td>`}
-        </tr>
-      `).join('');
-    }
-
     function mapCatalogRowsFromResponse(root, connectorId, address) {
       const datasets = root?.['dcat:dataset'] || root?.dataset || [];
       const list = Array.isArray(datasets) ? datasets : [datasets];
@@ -1960,8 +1952,6 @@
       document.getElementById('resolvedAddress').value = address;
       document.getElementById('transferAddress').value = address;
       state.catalogRows = rows;
-
-      renderCatalogRows('tblOffers', state.catalogRows, false);
       renderCatalogShowcase(state.catalogRows);
       refreshCatalogAssetOptions();
       syncCatalogSelectionState();
@@ -1992,8 +1982,6 @@
         if (!dedupe.has(key)) dedupe.set(key, row);
       });
       state.catalogRows = [...dedupe.values()];
-
-      renderCatalogRows('tblOffers', state.catalogRows, false);
       renderCatalogShowcase(state.catalogRows);
       refreshCatalogAssetOptions();
       syncCatalogSelectionState();

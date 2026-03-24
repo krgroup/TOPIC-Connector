@@ -258,8 +258,8 @@
       <section class="panel" id="panel-catalog">
         <div class="grid">
           <section class="card wide">
-            <h2 data-i18n="catalog.title">Data Offers del catálogo</h2>
-            <p class="muted" data-i18n="catalog.subtitle">Aquí el consumidor ve data-offers, revisa términos de policy y acepta condiciones antes de contratar.</p>
+            <h2 data-i18n="catalog.title">Escaparate de catálogo</h2>
+            <p class="muted" data-i18n="catalog.subtitle">Vista tipo revista: cada asset aparece como tarjeta con imagen, nombre y detalles desplegables.</p>
             <div class="grid">
               <div><label data-i18n="catalog.connector">Conector remoto</label><input id="searchConnectorId" placeholder="ej: conectoruc3m" /></div>
               <div><label data-i18n="catalog.dsp">URL DSP</label><input id="resolvedAddress" readonly /></div>
@@ -276,32 +276,33 @@
               <button class="ghost" id="btnLoadShowcase">Cargar escaparate completo</button>
             </div>
             <div id="catalogShowcase" class="asset-showcase"></div>
-            <label data-i18n="catalog.assetToContract">Asset a contratar</label>
-            <select id="catalogAssetId">
-              <option value="">Primero carga data-offers</option>
-            </select>
-            <label>Términos de policy seleccionada</label>
-            <textarea id="catalogPolicyTerms" rows="4" readonly placeholder="Al seleccionar un asset se mostrarán los términos de uso de la policy"></textarea>
-            <label>Policy JSON-LD (DCAT)</label>
-            <textarea id="catalogPolicyJsonLd" rows="7" readonly placeholder="Selecciona un asset para ver su política en JSON-LD"></textarea>
-            <div class="row" style="margin-top:8px; align-items:center">
-              <input id="catalogAcceptTerms" type="checkbox" style="width:auto; margin-top:0" />
-              <label for="catalogAcceptTerms" style="margin:0">Acepto los términos y condiciones de uso de la política seleccionada.</label>
-            </div>
-            <div class="row" style="margin-top:8px">
-              <button class="primary" id="btnRequestContract">Realizar contrato</button>
-            </div>
-            <table>
-              <thead><tr><th data-i18n="table.offer">Data Offer</th><th>Asset</th><th data-i18n="table.provider">Provider</th><th>Términos de policy</th></tr></thead>
-              <tbody id="tblOffers"></tbody>
-            </table>
+
+            <section id="catalogContractBox" class="contract-box" style="display:none">
+              <h3 style="margin-top:14px">Preparar contrato del asset seleccionado</h3>
+              <p class="muted">Aquí se muestran las políticas solo cuando eliges un asset del escaparate.</p>
+              <label data-i18n="catalog.assetToContract">Asset a contratar</label>
+              <select id="catalogAssetId">
+                <option value="">Primero carga data-offers</option>
+              </select>
+              <label>Términos de policy seleccionada</label>
+              <textarea id="catalogPolicyTerms" rows="4" readonly placeholder="Al seleccionar un asset se mostrarán los términos de uso de la policy"></textarea>
+              <label>Policy JSON-LD (DCAT)</label>
+              <textarea id="catalogPolicyJsonLd" rows="7" readonly placeholder="Selecciona un asset para ver su política en JSON-LD"></textarea>
+              <div class="row" style="margin-top:8px; align-items:center">
+                <input id="catalogAcceptTerms" type="checkbox" style="width:auto; margin-top:0" />
+                <label for="catalogAcceptTerms" style="margin:0">Acepto los términos y condiciones de uso de la política seleccionada.</label>
+              </div>
+              <div class="row" style="margin-top:8px">
+                <button class="primary" id="btnRequestContract">Realizar contrato</button>
+              </div>
+            </section>
           </section>
           <section class="card wide tutorial">
             <h3>Mini tutorial</h3>
             <ol>
-              <li>Escribe el ID del conector remoto y pulsa "Ver catalogos".</li>
-              <li>Selecciona un data-offer, revisa terminos y marca aceptacion.</li>
-              <li>Pulsa "Realizar contrato" para generar la negociacion contractual.</li>
+              <li>Pulsa "Cargar escaparate completo" para traer assets de varios conectores.</li>
+              <li>Explora las tarjetas cuadradas y abre "Más información" en cada una.</li>
+              <li>Selecciona un asset; abajo se abrirá la zona para contratar y revisar su política.</li>
             </ol>
           </section>
         </div>
@@ -524,11 +525,11 @@
     </div>
   </div>
 
-    <script src="config.js?v=20260324h"></script>
-  <script src="assets/ui/01-runtime.js?v=20260324h"></script>
-  <script src="assets/ui/02-operations.js?v=20260324h"></script>
-  <script src="assets/ui/03-secrets.js?v=20260324h"></script>
-  <script src="assets/ui/04-bootstrap.js?v=20260324h"></script>
+    <script src="config.js?v=20260324j"></script>
+  <script src="assets/ui/01-runtime.js?v=20260324j"></script>
+  <script src="assets/ui/02-operations.js?v=20260324j"></script>
+  <script src="assets/ui/03-secrets.js?v=20260324j"></script>
+  <script src="assets/ui/04-bootstrap.js?v=20260324j"></script>
 </body>
 </html>
 

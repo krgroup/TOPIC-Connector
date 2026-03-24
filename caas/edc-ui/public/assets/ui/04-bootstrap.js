@@ -160,6 +160,8 @@
       if (accept) accept.checked = false;
       syncCatalogSelectionState();
       activateView('catalog');
+      const contractBox = document.getElementById('catalogContractBox');
+      if (contractBox) contractBox.scrollIntoView({ behavior: 'smooth', block: 'start' });
     };
     window.showAgreementDetail = (index) => showInfoPopup('Detalle de contrato', state.agreementRows[index] || {});
     window.showTransferDetail = (index) => showInfoPopup('Detalle de transferencia', state.transferRows[index] || {});
