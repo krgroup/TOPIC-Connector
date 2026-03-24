@@ -724,31 +724,6 @@
       });
     }
 
-    function buildFallbackCatalogRowsFromPublishedAssets(rawAssets = []) {
-      const connectorId = String(cfg?.connectorName || PROD_CONNECTOR_ID || 'connector').trim();
-      const counterPartyAddress = buildDspUrl(connectorId);
-      return mapPublishedAssetRows(rawAssets).map((a, idx) => ({
-        offerId: `local-offer-${idx + 1}-${a.id || 'asset'}`,
-        assetId: a.id,
-        policyTarget: a.id,
-        assigner: connectorId,
-        connectorId,
-        counterPartyAddress,
-        policySummary: 'Politica disponible en el runtime local.',
-        policyRaw: {
-          '@id': `local-offer-${idx + 1}-${a.id || 'asset'}`,
-          '@type': 'odrl:Offer',
-          assigner: connectorId,
-          permission: [{ action: 'use', target: a.id }],
-        },
-        sourceHintUrl: '',
-        assetTitle: a.title,
-        assetDescription: a.description,
-        assetKeywords: a.keywords,
-        assetImageUrl: a.imageUrl,
-      }));
-    }
-
     function renderPublishedAssets(rows = []) {
       const wrap = document.getElementById('publishedAssetsGrid');
       if (!wrap) return;
@@ -2124,23 +2099,6 @@
       const { response, rows, address } = await fetchCatalogRowsForConnector(connectorId);
       document.getElementById('resolvedAddress').value = address;
       document.getElementById('transferAddress').value = address;
-
-      // Si el catalogo puntual falla (502) o no trae datos, usar fallback del catalogo completo.
-      if (!(response?.status >= 200 && response?.status < 300) || !rows.length) {
-        await loadCatalogShowcase(false);
-        if (showOutput) {
-          writeOut({
-            status: 200,
-            action: 'catalog-fallback',
-            connectorId,
-            requestedDsp: address,
-            originalStatus: response?.status || 0,
-            message: 'El catalogo remoto no respondio correctamente. Se muestran resultados disponibles por fallback operativo.'
-          });
-        }
-        return;
-      }
-
       state.catalogRows = rows;
       renderCatalogShowcase(state.catalogRows);
       refreshCatalogAssetOptions();
@@ -2171,15 +2129,7 @@
         const key = `${row.connectorId}::${row.assetId}::${row.offerId}`;
         if (!dedupe.has(key)) dedupe.set(key, row);
       });
-
-      let finalRows = [...dedupe.values()];
-      if (!finalRows.length) {
-        const localAssetsResp = await callApi('POST', '/v3/assets/request', q(), { silent: true, retries: 0 });
-        const localAssets = unwrap(localAssetsResp);
-        finalRows = buildFallbackCatalogRowsFromPublishedAssets(localAssets);
-      }
-
-      state.catalogRows = finalRows;
+      state.catalogRows = [...dedupe.values()];
       renderCatalogShowcase(state.catalogRows);
       refreshCatalogAssetOptions();
       syncCatalogSelectionState();
