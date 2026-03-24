@@ -9,6 +9,14 @@
       document.getElementById('btnRefreshOverview').onclick = refreshOverview;
       document.getElementById('btnSearchOffers').onclick = () => loadCatalogs(true);
       document.getElementById('btnRefreshCatalog').onclick = async () => { await loadCatalogs(false); };
+      if (document.getElementById('btnLoadShowcase')) {
+        document.getElementById('btnLoadShowcase').onclick = async () => { await loadCatalogShowcase(true); };
+      }
+      if (document.getElementById('catalogSearchText')) {
+        document.getElementById('catalogSearchText').addEventListener('input', () => {
+          if (typeof renderCatalogShowcase === 'function') renderCatalogShowcase(state.catalogRows || []);
+        });
+      }
       
       // Actualizar URL DSP dinámicamente cuando cambia el connector ID
       document.getElementById('searchConnectorId').addEventListener('input', (e) => {
@@ -143,6 +151,16 @@
       syncCatalogSelectionState();
       activateView('catalog');
     };
+    window.useCatalogAssetByIndex = (idx) => {
+      const parsed = Number(idx);
+      if (!Number.isInteger(parsed) || parsed < 0 || parsed >= (state.catalogRows || []).length) return;
+      const select = document.getElementById('catalogAssetId');
+      if (select) select.value = String(parsed);
+      const accept = document.getElementById('catalogAcceptTerms');
+      if (accept) accept.checked = false;
+      syncCatalogSelectionState();
+      activateView('catalog');
+    };
     window.showAgreementDetail = (index) => showInfoPopup('Detalle de contrato', state.agreementRows[index] || {});
     window.showTransferDetail = (index) => showInfoPopup('Detalle de transferencia', state.transferRows[index] || {});
 
@@ -153,6 +171,9 @@
       document.getElementById('badge').textContent = `${role} · EDC · ${getApiBaseUrl() || 'management api'}`;
       document.getElementById('searchConnectorId').value = '';
       document.getElementById('transferAddress').value = '';
+      if (document.getElementById('catalogConnectorsList')) {
+        document.getElementById('catalogConnectorsList').value = 'conectoruc3m, conectorfuenlabrada';
+      }
       document.getElementById('btnEitelPortal').onclick = () => window.open('https://uc3m-espacioeitel.hub.arcgis.com/', '_blank');
       document.getElementById('btnEitelProyecto').onclick = () => window.open('https://uc3m-espacioeitel.hub.arcgis.com/pages/proyecto', '_blank');
       document.getElementById('btnEitelCatalogo').onclick = () => window.open('https://uc3m-espacioeitel.hub.arcgis.com/search', '_blank');

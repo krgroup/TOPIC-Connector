@@ -158,7 +158,61 @@
     };
 
     function t(k) { return i18n[settings.language]?.[k] || k; }
-    function writeOut(payload) { out.textContent = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2); }
+
+    function pushStatusAlert(kind, title, message) {
+      const stack = document.getElementById('alertStack');
+      if (!stack) return;
+      const tone = ['success', 'error', 'warn', 'info'].includes(kind) ? kind : 'info';
+      const toast = document.createElement('article');
+      toast.className = `alert-toast ${tone}`;
+      toast.innerHTML = `
+        <div class="alert-title">${String(title || 'Aviso')}</div>
+        <div class="alert-message">${String(message || '')}</div>
+      `;
+      stack.appendChild(toast);
+      setTimeout(() => {
+        toast.remove();
+      }, tone === 'error' ? 9000 : 6500);
+    }
+
+    function deriveToastFromPayload(payload) {
+      if (!payload || typeof payload !== 'object') return null;
+      const status = Number(payload.status || 0);
+      if (!Number.isFinite(status) || status <= 0) return null;
+
+      const detail = String(
+        payload.message || payload.info || payload.hint || payload.error || payload.detail || ''
+      ).trim();
+
+      if (status >= 200 && status < 300) {
+        if (!detail && !payload.action && !payload.publish) return null;
+        return {
+          kind: 'success',
+          title: 'Operacion completada',
+          message: detail || 'La solicitud se ha ejecutado correctamente.'
+        };
+      }
+      if (status >= 400) {
+        return {
+          kind: 'error',
+          title: `Atencion: incidencia (${status})`,
+          message: detail || 'No se pudo completar la accion. Revisa los datos e intenta de nuevo.'
+        };
+      }
+      return {
+        kind: 'info',
+        title: `Estado ${status}`,
+        message: detail || 'Operacion en curso.'
+      };
+    }
+
+    window.pushStatusAlert = pushStatusAlert;
+
+    function writeOut(payload) {
+      out.textContent = typeof payload === 'string' ? payload : JSON.stringify(payload, null, 2);
+      const toast = deriveToastFromPayload(payload);
+      if (toast) pushStatusAlert(toast.kind, toast.title, toast.message);
+    }
 
     function showAuthGate(message = '', canLogin = true) {
       const gate = document.getElementById('authGate');

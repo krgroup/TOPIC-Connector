@@ -9,6 +9,113 @@
       return constraints.map(c => `${c.leftOperand || c['odrl:leftOperand'] || 'condición'} ${c.operator || c['odrl:operator'] || 'eq'} ${c.rightOperand || c['odrl:rightOperand'] || '-'}`).join(' | ');
     }
 
+    function parseKeywordList(raw) {
+      if (Array.isArray(raw)) return raw.map(v => String(v || '').trim()).filter(Boolean);
+      if (!raw) return [];
+      return String(raw)
+        .split(/[;,\n]/g)
+        .map(v => v.trim())
+        .filter(Boolean);
+    }
+
+    function firstNonEmpty(values = []) {
+      for (const value of values) {
+        if (value === undefined || value === null) continue;
+        const txt = String(value).trim();
+        if (txt) return txt;
+      }
+      return '';
+    }
+
+    function safeText(value, fallback = '') {
+      const txt = value === undefined || value === null ? '' : String(value).trim();
+      return txt || fallback;
+    }
+
+    function htmlEscape(value) {
+      return String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function extractDatasetMetadata(dataset) {
+      const d = dataset || {};
+      const props = d?.properties || d?.['dct:properties'] || d?.['edc:properties'] || {};
+
+      const title = firstNonEmpty([
+        d?.['dct:title'],
+        d?.title,
+        d?.name,
+        props?.['dct:title'],
+        props?.title,
+        props?.name,
+      ]);
+      const description = firstNonEmpty([
+        d?.['dct:description'],
+        d?.description,
+        props?.['dct:description'],
+        props?.description,
+        props?.['eitel:description'],
+      ]);
+      const imageUrl = firstNonEmpty([
+        d?.['schema:image'],
+        d?.image,
+        props?.['schema:image'],
+        props?.['eitel:image'],
+        props?.image,
+      ]);
+
+      const keywords = [
+        ...parseKeywordList(d?.['dcat:keyword']),
+        ...parseKeywordList(d?.keyword),
+        ...parseKeywordList(props?.['dcat:keyword']),
+        ...parseKeywordList(props?.['eitel:keywords']),
+        ...parseKeywordList(props?.keywords),
+      ];
+
+      return {
+        title,
+        description,
+        imageUrl,
+        keywords: [...new Set(keywords)],
+      };
+    }
+
+    function buildPolicyDcatJsonLd(row) {
+      const payload = {
+        '@context': {
+          dcat: 'https://www.w3.org/ns/dcat#',
+          dct: 'http://purl.org/dc/terms/',
+          odrl: 'http://www.w3.org/ns/odrl/2/',
+          eitel: 'https://w3id.org/eitel/ns/'
+        },
+        '@type': 'dcat:Dataset',
+        '@id': row?.assetId || '',
+        'dct:title': row?.assetTitle || clean(row?.assetId || ''),
+        'dct:description': row?.assetDescription || '',
+        'dcat:keyword': Array.isArray(row?.assetKeywords) ? row.assetKeywords : [],
+        'eitel:connectorId': row?.connectorId || '',
+        'eitel:connectorAddress': row?.counterPartyAddress || '',
+        'odrl:hasPolicy': row?.policyRaw || {},
+      };
+      return JSON.stringify(payload, null, 2);
+    }
+
+    function parseConnectorCandidates() {
+      const listRaw = document.getElementById('catalogConnectorsList')?.value || '';
+      const values = listRaw
+        .split(/[\n,;]+/g)
+        .map(v => String(v || '').trim())
+        .filter(Boolean);
+      const single = String(document.getElementById('searchConnectorId')?.value || '').trim();
+      if (single) values.unshift(single);
+      if (!values.length) values.push('conectoruc3m', 'conectorfuenlabrada');
+      return [...new Set(values)];
+    }
+
     let transferStartInFlight = false;
     const _remoteLocalDownloadInFlightByContract = new Set();
     const localTransferStorageKey = `eitel.ui.localTransfers.${connectorName}`;
@@ -440,6 +547,7 @@
     function refreshCatalogAssetOptions() {
       const sel = document.getElementById('catalogAssetId');
       const terms = document.getElementById('catalogPolicyTerms');
+      const policyJsonLd = document.getElementById('catalogPolicyJsonLd');
       const accept = document.getElementById('catalogAcceptTerms');
       if (!sel) return;
 
@@ -447,23 +555,91 @@
       state.catalogRows.forEach((r, idx) => {
         const o = document.createElement('option');
         o.value = String(idx);
-        o.textContent = `${clean(r.assetId)} · ${clean(r.offerId)} · ${r.assigner || '-'}`;
+        o.textContent = `${safeText(r.assetTitle, clean(r.assetId))} · ${safeText(r.connectorId, r.assigner || '-')}`;
         sel.appendChild(o);
       });
 
       if (terms) terms.value = '';
+      if (policyJsonLd) policyJsonLd.value = '';
       if (accept) accept.checked = false;
+    }
+
+    function renderCatalogShowcase(rows = []) {
+      const wrap = document.getElementById('catalogShowcase');
+      if (!wrap) return;
+      const query = String(document.getElementById('catalogSearchText')?.value || '').trim().toLowerCase();
+
+      const indexed = state.catalogRows.map((row, idx) => ({ row, idx }));
+      const filtered = indexed.filter(({ row }) => {
+        if (!query) return true;
+        const haystack = [
+          row.assetTitle,
+          row.assetDescription,
+          row.assetId,
+          row.offerId,
+          row.connectorId,
+          ...(Array.isArray(row.assetKeywords) ? row.assetKeywords : []),
+        ].join(' ').toLowerCase();
+        return haystack.includes(query);
+      });
+
+      if (!rows.length || !filtered.length) {
+        wrap.innerHTML = '<div class="card" style="box-shadow:none"><p class="muted" style="margin:0">No hay assets para mostrar con el filtro actual.</p></div>';
+        return;
+      }
+
+      wrap.innerHTML = filtered.map(({ row, idx }) => {
+        const title = htmlEscape(safeText(row.assetTitle, clean(row.assetId)));
+        const connector = htmlEscape(safeText(row.connectorId, row.assigner || '-'));
+        const desc = htmlEscape(safeText(row.assetDescription, 'Sin descripción publicada.'));
+        const image = String(row.assetImageUrl || '').trim();
+        const keywords = Array.isArray(row.assetKeywords) ? row.assetKeywords.slice(0, 8) : [];
+        const media = image
+          ? `<div class="asset-card-media"><img src="${htmlEscape(image)}" alt="Imagen del asset ${title}" /></div>`
+          : '<div class="asset-card-media">SIN IMAGEN</div>';
+        const chips = keywords.length
+          ? `<div class="asset-card-keywords">${keywords.map(k => `<span class="asset-chip">${htmlEscape(k)}</span>`).join('')}</div>`
+          : '<div class="asset-card-meta">Sin keywords</div>';
+
+        return `
+          <article class="asset-card">
+            ${media}
+            <div class="asset-card-body">
+              <div class="asset-card-title">${title}</div>
+              <div class="asset-card-meta">Conector: ${connector}</div>
+              <div class="asset-card-desc">${desc}</div>
+              ${chips}
+              <div class="row" style="margin-top:auto">
+                <button class="primary" onclick="window.useCatalogAssetByIndex(${idx})">Seleccionar</button>
+              </div>
+            </div>
+          </article>
+        `;
+      }).join('');
     }
 
     function syncCatalogSelectionState() {
       const sel = document.getElementById('catalogAssetId');
       const terms = document.getElementById('catalogPolicyTerms');
+      const policyJsonLd = document.getElementById('catalogPolicyJsonLd');
       const accept = document.getElementById('catalogAcceptTerms');
       if (!sel || !accept) return;
 
       const idx = Number(sel.value);
       const selected = Number.isInteger(idx) && idx >= 0 ? state.catalogRows[idx] : null;
       if (terms) terms.value = selected?.policySummary || '';
+      if (policyJsonLd) policyJsonLd.value = selected ? buildPolicyDcatJsonLd(selected) : '';
+
+      const selectedConnector = document.getElementById('catalogSelectedConnector');
+      if (selectedConnector) selectedConnector.value = selected?.connectorId || '';
+      if (selected?.counterPartyAddress) {
+        const resolved = document.getElementById('resolvedAddress');
+        const transferAddress = document.getElementById('transferAddress');
+        const connectorInput = document.getElementById('searchConnectorId');
+        if (resolved) resolved.value = selected.counterPartyAddress;
+        if (transferAddress) transferAddress.value = selected.counterPartyAddress;
+        if (connectorInput && selected.connectorId) connectorInput.value = selected.connectorId;
+      }
 
       // Explicit flow: contract is only requested when user clicks "Realizar contrato".
     }
@@ -1345,7 +1521,12 @@
       }
 
       return {
-        '@context': 'http://www.w3.org/ns/odrl.jsonld',
+        '@context': {
+          odrl: 'http://www.w3.org/ns/odrl/2/',
+          dcat: 'https://www.w3.org/ns/dcat#',
+          dct: 'http://purl.org/dc/terms/',
+          gx: 'https://w3id.org/gaia-x/policy/v1#'
+        },
         '@id': policyId,
         '@type': 'http://www.w3.org/ns/odrl/2/Set',
         permission: [{
@@ -1449,6 +1630,10 @@
 
     async function createOrUpdateAsset() {
       const id = document.getElementById('assetIdPreview').value;
+      const assetName = (document.getElementById('assetName').value || '').trim();
+      const assetDescription = (document.getElementById('assetDescription')?.value || '').trim();
+      const assetKeywords = parseKeywordList(document.getElementById('assetKeywords')?.value || '');
+      const assetImageUrl = (document.getElementById('assetImageUrl')?.value || '').trim();
       const sourceMode = getSelectedAssetSourceMode();
 
       const authType = sourceMode === 'local-file'
@@ -1541,17 +1726,37 @@
         '@id': id,
         '@type': 'Asset',
         properties: {
-          name: document.getElementById('assetName').value.trim(),
+          name: assetName,
+          'dct:title': assetName,
+          'dct:description': assetDescription,
+          'dcat:keyword': assetKeywords.join(', '),
+          'schema:image': assetImageUrl,
           contenttype: contentType,
           'eitel:authType': authType,
           'eitel:sourceMode': sourceMode,
           'eitel:localAssetPublicUrl': localUploadInfo?.publicUrl || '',
           'eitel:localAssetFilename': localUploadInfo?.filename || '',
+          'eitel:description': assetDescription,
+          'eitel:keywords': assetKeywords.join(', '),
+          'eitel:image': assetImageUrl,
           'eitel:authSecret': document.getElementById('pubAuthSecret')?.value || '',
           'eitel:authClientId': document.getElementById('pubAuthClientId')?.value.trim() || '',
           'eitel:authClientSecret': document.getElementById('pubAuthClientSecret')?.value.trim() || '',
           'eitel:authToken': authType === 'arcgis-login' ? '' : (document.getElementById('pubAuthToken')?.value.trim() || ''),
-          'eitel:authTokenSource': authType === 'arcgis-login' ? 'arcgis-login' : ''
+          'eitel:authTokenSource': authType === 'arcgis-login' ? 'arcgis-login' : '',
+          'eitel:dcatJsonLd': JSON.stringify({
+            '@context': {
+              dcat: 'https://www.w3.org/ns/dcat#',
+              dct: 'http://purl.org/dc/terms/',
+              schema: 'https://schema.org/'
+            },
+            '@id': id,
+            '@type': 'dcat:Dataset',
+            'dct:title': assetName,
+            'dct:description': assetDescription,
+            'dcat:keyword': assetKeywords,
+            ...(assetImageUrl ? { 'schema:image': assetImageUrl } : {}),
+          })
         },
         dataAddress: {
           '@type': 'DataAddress',
@@ -1570,6 +1775,10 @@
         showInfoPopup('Asset publicado', {
           status: publishResp.status,
           assetId: id,
+          name: assetName,
+          description: assetDescription,
+          keywords: assetKeywords,
+          image: assetImageUrl,
           sourceMode,
           baseUrl,
           path,
@@ -1639,11 +1848,61 @@
       tbody.innerHTML = rows.map((r, i) => `
         <tr>
           <td class="title-cell" title="${r.offerId}">Oferta ${i + 1} · ${clean(r.offerId)}</td>
-          <td class="title-cell" title="${r.assetId}">Asset · ${clean(r.assetId)}</td>
-          <td>${r.assigner}</td>
-          ${withUseButton ? `<td><button class="ghost" onclick="window.useCatalogAsset('${(r.assetId || '').replace(/'/g, "\\'")}')">Usar</button></td>` : `<td class="title-cell" title="${(r.policySummary || '').replace(/"/g, '&quot;')}">${r.policySummary || '-'}</td>`}
+          <td class="title-cell" title="${r.assetId}">${safeText(r.assetTitle, clean(r.assetId))}</td>
+          <td>${safeText(r.connectorId, r.assigner || '-')}</td>
+          ${withUseButton ? `<td><button class="ghost" onclick="window.useCatalogAssetByIndex(${i})">Usar</button></td>` : `<td class="title-cell" title="${(r.policySummary || '').replace(/"/g, '&quot;')}">${r.policySummary || '-'}</td>`}
         </tr>
       `).join('');
+    }
+
+    function mapCatalogRowsFromResponse(root, connectorId, address) {
+      const datasets = root?.['dcat:dataset'] || root?.dataset || [];
+      const list = Array.isArray(datasets) ? datasets : [datasets];
+      const rows = list.flatMap(d => {
+        const policiesRaw = d?.['odrl:hasPolicy'] || d?.hasPolicy || [];
+        const policies = Array.isArray(policiesRaw) ? policiesRaw : [policiesRaw];
+        const datasetId = d?.['@id'] || d?.id || '';
+        const sourceHintUrl = pickBestSourceUrl(collectUrlCandidatesFromObject(d));
+        const meta = extractDatasetMetadata(d);
+
+        return policies.map(pol => {
+          const permsRaw = pol?.['odrl:permission'] || pol?.permission || [];
+          const perms = Array.isArray(permsRaw) ? permsRaw : [permsRaw];
+          const target = perms.find(p => p?.['odrl:target'] || p?.target)?.['odrl:target'] || perms.find(p => p?.['odrl:target'] || p?.target)?.target || datasetId;
+          return {
+            offerId: pol?.['@id'] || pol?.id || '',
+            assetId: datasetId || target,
+            policyTarget: target || '',
+            assigner: pol?.assigner || pol?.['odrl:assigner'] || connectorId,
+            connectorId,
+            counterPartyAddress: address,
+            policySummary: summarizePolicyTerms(pol),
+            policyRaw: pol,
+            sourceHintUrl,
+            assetTitle: meta.title,
+            assetDescription: meta.description,
+            assetKeywords: meta.keywords,
+            assetImageUrl: meta.imageUrl,
+          };
+        });
+      }).filter(x => x.offerId || x.assetId);
+
+      return rows;
+    }
+
+    async function fetchCatalogRowsForConnector(connectorId) {
+      const normalizedConnector = String(connectorId || '').trim() || 'provider';
+      const address = buildDspUrl(normalizedConnector);
+      const counterPartyId = resolveCounterPartyId(normalizedConnector, address);
+      const response = await callApi('POST', '/v3/catalog/request', JSON.stringify({
+        '@context': { edc: 'https://w3id.org/edc/v0.0.1/ns/' },
+        '@type': 'CatalogRequest',
+        counterPartyId,
+        counterPartyAddress: address,
+        protocol: 'dataspace-protocol-http:2025-1'
+      }));
+      const rows = mapCatalogRowsFromResponse(response?.data || {}, normalizedConnector, address);
+      return { response, rows, connectorId: normalizedConnector, address };
     }
 
     function ensureDspVersion(url) {
@@ -1697,49 +1956,56 @@
 
     async function loadCatalogs(showOutput = true) {
       const connectorId = (document.getElementById('searchConnectorId').value || 'provider').trim() || 'provider';
-      const address = buildDspUrl(connectorId);
+      const { response, rows, address } = await fetchCatalogRowsForConnector(connectorId);
       document.getElementById('resolvedAddress').value = address;
       document.getElementById('transferAddress').value = address;
-
-      const counterPartyId = resolveCounterPartyId(connectorId, address);
-      const r = await callApi('POST', '/v3/catalog/request', JSON.stringify({
-        '@context': { edc: 'https://w3id.org/edc/v0.0.1/ns/' },
-        '@type': 'CatalogRequest',
-        counterPartyId,
-        counterPartyAddress: address,
-        protocol: 'dataspace-protocol-http:2025-1'
-      }));
-
-      const root = r?.data || {};
-      const datasets = root?.['dcat:dataset'] || root?.dataset || [];
-      const list = Array.isArray(datasets) ? datasets : [datasets];
-      state.catalogRows = list.flatMap(d => {
-        const policiesRaw = d?.['odrl:hasPolicy'] || d?.hasPolicy || [];
-        const policies = Array.isArray(policiesRaw) ? policiesRaw : [policiesRaw];
-        const datasetId = d?.['@id'] || d?.id || '';
-        const sourceHintUrl = pickBestSourceUrl(collectUrlCandidatesFromObject(d));
-
-        return policies.map(pol => {
-          const permsRaw = pol?.['odrl:permission'] || pol?.permission || [];
-          const perms = Array.isArray(permsRaw) ? permsRaw : [permsRaw];
-          const target = perms.find(p => p?.['odrl:target'] || p?.target)?.['odrl:target'] || perms.find(p => p?.['odrl:target'] || p?.target)?.target || datasetId;
-          return {
-            offerId: pol?.['@id'] || pol?.id || '',
-            // Priorizar siempre el ID del dataset del catálogo para evitar targets dummy en policies.
-            assetId: datasetId || target,
-            policyTarget: target || '',
-            assigner: pol?.assigner || pol?.['odrl:assigner'] || connectorId,
-            policySummary: summarizePolicyTerms(pol),
-            policyRaw: pol,
-            sourceHintUrl,
-          };
-        });
-      }).filter(x => x.offerId || x.assetId);
+      state.catalogRows = rows;
 
       renderCatalogRows('tblOffers', state.catalogRows, false);
+      renderCatalogShowcase(state.catalogRows);
       refreshCatalogAssetOptions();
       syncCatalogSelectionState();
-      if (showOutput) writeOut(r);
+      if (showOutput) writeOut(response);
+    }
+
+    async function loadCatalogShowcase(showOutput = true) {
+      const connectors = parseConnectorCandidates();
+      const allRows = [];
+      const connectorSummaries = [];
+
+      for (const connectorId of connectors) {
+        const result = await fetchCatalogRowsForConnector(connectorId);
+        if (result?.response?.status >= 200 && result?.response?.status < 300) {
+          allRows.push(...(result.rows || []));
+        }
+        connectorSummaries.push({
+          connectorId,
+          status: result?.response?.status || 0,
+          assets: (result.rows || []).length,
+          dspUrl: result?.address || ''
+        });
+      }
+
+      const dedupe = new Map();
+      allRows.forEach(row => {
+        const key = `${row.connectorId}::${row.assetId}::${row.offerId}`;
+        if (!dedupe.has(key)) dedupe.set(key, row);
+      });
+      state.catalogRows = [...dedupe.values()];
+
+      renderCatalogRows('tblOffers', state.catalogRows, false);
+      renderCatalogShowcase(state.catalogRows);
+      refreshCatalogAssetOptions();
+      syncCatalogSelectionState();
+
+      if (showOutput) {
+        writeOut({
+          status: 200,
+          action: 'catalog-showcase',
+          connectors: connectorSummaries,
+          totalAssets: state.catalogRows.length,
+        });
+      }
     }
 
     async function requestContractByAsset() {
@@ -1792,11 +2058,26 @@
         return;
       }
 
+      if (selected.counterPartyAddress) {
+        const resolvedAddressInput = document.getElementById('resolvedAddress');
+        const transferAddressInput = document.getElementById('transferAddress');
+        const connectorInput = document.getElementById('searchConnectorId');
+        const selectedConnector = document.getElementById('catalogSelectedConnector');
+        if (resolvedAddressInput) resolvedAddressInput.value = selected.counterPartyAddress;
+        if (transferAddressInput) transferAddressInput.value = selected.counterPartyAddress;
+        if (connectorInput) connectorInput.value = selected.connectorId || connectorInput.value;
+        if (selectedConnector) selectedConnector.value = selected.connectorId || '';
+      }
+
       const policy = selected.policyRaw
         ? JSON.parse(JSON.stringify(selected.policyRaw))
         : {};
 
-      policy['@context'] = 'http://www.w3.org/ns/odrl.jsonld';
+      policy['@context'] = {
+        odrl: 'http://www.w3.org/ns/odrl/2/',
+        dcat: 'https://www.w3.org/ns/dcat#',
+        dct: 'http://purl.org/dc/terms/'
+      };
       policy['@type'] = 'odrl:Offer';
       policy['@id'] = policy['@id'] || selected.offerId;
       policy.assigner = policy.assigner || policy['odrl:assigner'] || selected.assigner || 'provider';

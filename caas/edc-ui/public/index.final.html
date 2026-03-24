@@ -91,6 +91,12 @@
               <div><label>Contract Definition ID</label><input id="contractDefIdPreview" readonly /></div>
             </div>
             <label data-i18n="publish.name">Nombre</label><input id="assetName" placeholder="ej: Dataset Clima UC3M" />
+            <label>Descripción</label>
+            <textarea id="assetDescription" rows="3" placeholder="Describe qué datos contiene este asset, su periodicidad y para qué sirve."></textarea>
+            <div class="grid">
+              <div><label>Keywords (separadas por coma)</label><input id="assetKeywords" placeholder="energia, consumo, municipio, clima" /></div>
+              <div><label>Foto (URL opcional)</label><input id="assetImageUrl" placeholder="https://.../imagen.jpg" /></div>
+            </div>
             <label>Origen del asset</label>
             <select id="assetSourceMode">
               <option value="remote-url">Base URL remota</option>
@@ -258,16 +264,26 @@
               <div><label data-i18n="catalog.connector">Conector remoto</label><input id="searchConnectorId" placeholder="ej: conectoruc3m" /></div>
               <div><label data-i18n="catalog.dsp">URL DSP</label><input id="resolvedAddress" readonly /></div>
             </div>
+            <label>Conectores del espacio de datos (uno por línea o separados por coma)</label>
+            <textarea id="catalogConnectorsList" rows="3" placeholder="conectoruc3m, conectorfuenlabrada"></textarea>
+            <div class="grid">
+              <div><label>Buscar en escaparate</label><input id="catalogSearchText" placeholder="Filtra por nombre, keyword o descripción" /></div>
+              <div><label>Conector seleccionado</label><input id="catalogSelectedConnector" readonly placeholder="Se rellena al elegir un asset" /></div>
+            </div>
             <div class="row" style="margin-top:8px">
               <button class="primary" id="btnSearchOffers" data-i18n="catalog.load">Ver catálogos</button>
               <button class="ghost" id="btnRefreshCatalog" data-i18n="catalog.refresh">Actualizar</button>
+              <button class="ghost" id="btnLoadShowcase">Cargar escaparate completo</button>
             </div>
+            <div id="catalogShowcase" class="asset-showcase"></div>
             <label data-i18n="catalog.assetToContract">Asset a contratar</label>
             <select id="catalogAssetId">
               <option value="">Primero carga data-offers</option>
             </select>
             <label>Términos de policy seleccionada</label>
             <textarea id="catalogPolicyTerms" rows="4" readonly placeholder="Al seleccionar un asset se mostrarán los términos de uso de la policy"></textarea>
+            <label>Policy JSON-LD (DCAT)</label>
+            <textarea id="catalogPolicyJsonLd" rows="7" readonly placeholder="Selecciona un asset para ver su política en JSON-LD"></textarea>
             <div class="row" style="margin-top:8px; align-items:center">
               <input id="catalogAcceptTerms" type="checkbox" style="width:auto; margin-top:0" />
               <label for="catalogAcceptTerms" style="margin:0">Acepto los términos y condiciones de uso de la política seleccionada.</label>
@@ -453,6 +469,7 @@
     </aside>
   </div>
   <button class="ghost console-show" id="btnConsoleShow">⮜ Consola</button>
+  <div id="alertStack" class="alert-stack" aria-live="polite" aria-atomic="true"></div>
 
   <div class="auth-gate" id="authGate">
     <div class="auth-card">
@@ -507,11 +524,11 @@
     </div>
   </div>
 
-    <script src="config.js?v=20260324g"></script>
-  <script src="assets/ui/01-runtime.js?v=20260324g"></script>
-  <script src="assets/ui/02-operations.js?v=20260324g"></script>
-  <script src="assets/ui/03-secrets.js?v=20260324g"></script>
-  <script src="assets/ui/04-bootstrap.js?v=20260324g"></script>
+    <script src="config.js?v=20260324h"></script>
+  <script src="assets/ui/01-runtime.js?v=20260324h"></script>
+  <script src="assets/ui/02-operations.js?v=20260324h"></script>
+  <script src="assets/ui/03-secrets.js?v=20260324h"></script>
+  <script src="assets/ui/04-bootstrap.js?v=20260324h"></script>
 </body>
 </html>
 
