@@ -300,6 +300,22 @@
       return `${window.location.origin}${prefix}/local-assets`;
     }
 
+    function getConnectorPrefixFromManagementApiUrl() {
+      const apiBase = String(getApiBaseUrl() || '').trim();
+      if (!apiBase) return '';
+      try {
+        const url = apiBase.startsWith('http://') || apiBase.startsWith('https://')
+          ? new URL(apiBase)
+          : new URL(apiBase, window.location.origin);
+        const parts = (url.pathname || '').split('/').filter(Boolean);
+        if (parts.length >= 3 && String(parts[1]).toLowerCase() === 'api' && String(parts[2]).toLowerCase() === 'management') {
+          const prefix = String(parts[0] || '').trim();
+          if (prefix.toLowerCase().startsWith('conector')) return prefix;
+        }
+      } catch {}
+      return '';
+    }
+
     function getLocalAssetsApiBaseUrlCandidates() {
       const candidates = [];
       const pushIfValid = (value) => {
@@ -310,17 +326,19 @@
 
       pushIfValid(getLocalAssetsApiBaseUrl());
 
+      const fromApiBase = getConnectorPrefixFromManagementApiUrl();
+      if (fromApiBase) {
+        pushIfValid(`${window.location.origin}/${fromApiBase}/local-assets`);
+      }
+
       const configuredPrefix = canonicalConnectorPrefix(cfg?.connectorName || '');
       if (configuredPrefix) {
         pushIfValid(`${window.location.origin}/${configuredPrefix}/local-assets`);
         pushIfValid(`${window.location.origin}/${configuredPrefix.toLowerCase()}/local-assets`);
       }
 
-      // Compatibilidad: históricamente hubo despliegues con rutas en raíz o con prefijos distintos.
+      // Compatibilidad: algunos despliegues publican local-assets en raíz.
       pushIfValid(`${window.location.origin}/local-assets`);
-      pushIfValid(`${window.location.origin}/conectoruc3m/local-assets`);
-      pushIfValid(`${window.location.origin}/conectorFuenlabrada/local-assets`);
-      pushIfValid(`${window.location.origin}/conectorfuenlabrada/local-assets`);
 
       return candidates;
     }
@@ -1702,7 +1720,93 @@
       }
     }
 
-    async function uploadTransferToArcgis(contractId, assetId) {
+    async function fetchRemoteBlobViaTransferSink(contractId, assetId, transferParty = null) {
+      const transferAddress = String(transferParty?.address || '').trim() || (document.getElementById('transferAddress')?.value || '').trim();
+      const counterPartyId = String(transferParty?.counterPartyId || '').trim();
+      if (!transferAddress) {
+        return { status: 400, error: 'Falta dirección DSP del partner para recuperar el asset remoto.' };
+      }
+
+      const sinkPublicBaseUrl = buildLocalDownloadSinkPublicBaseUrl();
+      const sinkInternalBaseUrl = buildLocalDownloadSinkInternalBaseUrl();
+      const sinkBaseUrlForTransfer = shouldUsePublicSinkForRemoteTransfer(transferAddress)
+        ? sinkPublicBaseUrl
+        : sinkInternalBaseUrl;
+
+      try { await fetch(`${sinkPublicBaseUrl}/records`, { method: 'DELETE' }); } catch {}
+
+      const path = `/ingest?contractId=${encodeURIComponent(contractId)}&assetId=${encodeURIComponent(assetId || '')}`;
+      const transferReq = {
+        '@context': { edc: 'https://w3id.org/edc/v0.0.1/ns/' },
+        '@type': 'TransferRequest',
+        protocol: 'dataspace-protocol-http:2025-1',
+        counterPartyAddress: transferAddress,
+        ...(counterPartyId ? { counterPartyId } : {}),
+        contractId,
+        transferType: 'HttpData-PUSH',
+        dataDestination: {
+          type: 'HttpData',
+          baseUrl: sinkBaseUrlForTransfer,
+          method: 'POST',
+          path,
+        }
+      };
+
+      const startResp = await callApi('POST', '/v3/transferprocesses', JSON.stringify(transferReq), { retries: 0, silent: true });
+      const transferId = startResp?.data?.['@id'] || startResp?.data?.id || '';
+      if (!(startResp.status >= 200 && startResp.status < 300) || !transferId) {
+        return {
+          status: startResp.status || 500,
+          error: 'No se pudo iniciar la transferencia remota al sink local para ArcGIS.',
+          response: startResp,
+        };
+      }
+
+      const started = Date.now();
+      const timeoutMs = 180000;
+      while (Date.now() - started < timeoutMs) {
+        await sleepMs(2500);
+
+        const record = await getLatestDownloadSinkRecord(contractId).catch(() => null);
+        if (record?.downloadPath) {
+          const fileUrl = `${sinkPublicBaseUrl}${record.downloadPath}`;
+          try {
+            const fileResp = await fetch(fileUrl, { method: 'GET', credentials: 'include' });
+            if (!fileResp.ok) {
+              return {
+                status: fileResp.status,
+                error: 'El sink local recibió registro pero no se pudo leer el archivo.',
+                sourceUrl: fileUrl,
+              };
+            }
+            const blob = await fileResp.blob();
+            const contentType = fileResp.headers.get('content-type') || blob.type || 'application/octet-stream';
+            const filename = record.filename || inferDownloadFilename(assetId, fileUrl, contentType, fileResp.headers.get('content-disposition') || '');
+            return { status: 200, blob, filename, contentType, sourceUrl: fileUrl, transferId };
+          } catch (error) {
+            return { status: 500, error: `Error leyendo archivo del sink local: ${String(error)}`, transferId };
+          }
+        }
+
+        const stateResp = await callApi('GET', `/v3/transferprocesses/${encodeURIComponent(transferId)}/state`, undefined, { silent: true, retries: 0 });
+        const st = normalizeTransferState(stateResp?.data?.state || stateResp?.data?.['edc:state'] || '');
+        if (st === 'FAILED' || st === 'TERMINATED') {
+          return {
+            status: 502,
+            error: 'La transferencia remota terminó en error antes de guardar archivo en sink local.',
+            transferId,
+            state: st,
+          };
+        }
+      }
+
+      return {
+        status: 504,
+        error: 'Timeout esperando archivo remoto en sink local para subida ArcGIS.',
+      };
+    }
+
+    async function uploadTransferToArcgis(contractId, assetId, transferParty = null) {
       const title = String(document.getElementById('arcgisUploadTitle')?.value || '').trim();
       const typeInput = String(document.getElementById('arcgisUploadType')?.value || '').trim();
       const tags = String(document.getElementById('arcgisUploadTags')?.value || '').trim();
@@ -1715,7 +1819,10 @@
       const token = await resolveArcgisTokenForPublish();
       if (!token) return { status: 401, error: 'No se pudo obtener token ArcGIS para subida.' };
 
-      const blobResult = await fetchAssetBlobForArcgisUpload(contractId, assetId);
+      let blobResult = await fetchAssetBlobForArcgisUpload(contractId, assetId);
+      if (!(blobResult.status >= 200 && blobResult.status < 300)) {
+        blobResult = await fetchRemoteBlobViaTransferSink(contractId, assetId, transferParty);
+      }
       if (!(blobResult.status >= 200 && blobResult.status < 300)) return blobResult;
 
       const resolvedType = normalizeArcgisItemType(typeInput, blobResult.filename, blobResult.contentType);
@@ -3109,7 +3216,7 @@
       }
 
       if (transferMode === 'arcgis-upload') {
-        const uploadResp = await uploadTransferToArcgis(contractId, agreementAssetId);
+        const uploadResp = await uploadTransferToArcgis(contractId, agreementAssetId, transferParty);
         const localTransfer = addLocalTransferRecord(buildLocalTransferRecord(uploadResp));
         writeOut(uploadResp);
         await refreshOverview();
