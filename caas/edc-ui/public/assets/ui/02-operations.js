@@ -340,7 +340,43 @@
       // Compatibilidad: algunos despliegues publican local-assets en raíz.
       pushIfValid(`${window.location.origin}/local-assets`);
 
+      // Fallbacks explícitos para entornos mixtos UC3M/Fuenlabrada.
+      pushIfValid(`${window.location.origin}/conectoruc3m/local-assets`);
+      pushIfValid(`${window.location.origin}/conectorFuenlabrada/local-assets`);
+      pushIfValid(`${window.location.origin}/conectorfuenlabrada/local-assets`);
+
       return candidates;
+    }
+
+    async function prioritizeHealthyLocalAssetsCandidates(baseCandidates = []) {
+      const normalized = Array.isArray(baseCandidates) ? [...new Set(baseCandidates.filter(Boolean))] : [];
+      if (normalized.length <= 1) return normalized;
+
+      const healthy = [];
+      const unhealthy = [];
+      for (const base of normalized) {
+        const healthUrl = String(base).replace(/\/local-assets\/?$/i, '/health');
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 2500);
+          const response = await fetch(healthUrl, {
+            method: 'GET',
+            signal: controller.signal,
+            cache: 'no-store',
+            credentials: 'include',
+          });
+          clearTimeout(timer);
+          if (response.ok) {
+            healthy.push(base);
+          } else {
+            unhealthy.push(base);
+          }
+        } catch {
+          unhealthy.push(base);
+        }
+      }
+
+      return [...healthy, ...unhealthy];
     }
 
     function getAssetBundleBackups() {
@@ -2076,7 +2112,8 @@
       }
 
       const filename = file.name || `${assetId || 'asset'}.bin`;
-      const baseCandidates = getLocalAssetsApiBaseUrlCandidates();
+      let baseCandidates = getLocalAssetsApiBaseUrlCandidates();
+      baseCandidates = await prioritizeHealthyLocalAssetsCandidates(baseCandidates);
       let lastHttpFailure = null;
 
       // First try raw upload to avoid multipart/proxy edge cases.
