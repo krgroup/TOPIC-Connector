@@ -3,3 +3,11 @@ _tmp_remote_check/
 response_catalog.json
 tmp_logo_b64.txt
 caas/data/caas.db
+.venv/
+__pycache__/
+*.py[cod]
+.env
+.env.production
+connectors/*/.env
+caas/control-plane/.env
+demo_assets_data/
