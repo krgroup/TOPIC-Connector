@@ -292,7 +292,7 @@
 
     function startArcgisLogin() {
       if (!arcgis.portalUrl) {
-        showAuthGate('Falta configurar ARCGIS_PORTAL_URL.', false);
+        showAuthGate('Acceso no disponible. Contacte con el administrador.', false);
         return;
       }
       const clientId = arcgis.clientId || 'arcgisonline';
@@ -323,7 +323,7 @@
       if (checkBtnGate) checkBtnGate.onclick = () => ensureArcgisLogin();
 
       if (!arcgis.portalUrl) {
-        showAuthGate('ArcGIS login activo pero falta configurar ARCGIS_PORTAL_URL (y normalmente ARCGIS_CLIENT_ID y ARCGIS_REDIRECT_URI) en .env.production.', false);
+        showAuthGate('Acceso no disponible. Contacte con el administrador.', false);
         return false;
       }
 
@@ -331,7 +331,7 @@
         const appHost = window.location.host;
         const portalHost = new URL(arcgis.portalUrl).host;
         if (appHost !== portalHost) {
-          showAuthGate(`Host distinto detectado. Abre la consola en https://${portalHost}/conectoruc3m/ para reutilizar la sesion del portal. Host actual: ${appHost}`, true);
+          showAuthGate('Acceda desde la URL correcta del portal para iniciar sesion.', true);
           return false;
         }
       } catch {}
@@ -366,7 +366,7 @@
         return true;
       } catch (e) {
         clearStoredArcgisToken();
-        showAuthGate(`Inicia sesion en ArcGIS Enterprise para acceder.\n${String(e?.message || e)}\nTip: accede siempre por https://gis.eiteldata.eu/conectoruc3m/`, true);
+        showAuthGate('No se pudo verificar la sesion. Inicie sesion en ArcGIS Enterprise e intente de nuevo.', true);
         return false;
       }
     }

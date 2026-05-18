@@ -39,7 +39,7 @@ ArcGIS Enterprise login gate (required for UI access control):
 - `ARCGIS_AUTH_ENABLED=true`
 - `ARCGIS_PORTAL_URL=https://gis.eiteldata.eu/arcgis`
 - `ARCGIS_CLIENT_ID=<app-id-registrada-en-portal>`
-- `ARCGIS_REDIRECT_URI=https://gis.eiteldata.eu/conectoruc3m/`
+- `ARCGIS_REDIRECT_URI=https://gis.eiteldata.eu/<nombre-conector>/`
 - `ARCGIS_REQUIRED_ORG_ID=<orgId-opcional>`
 - `ARCGIS_REQUIRED_GROUP_ID=<groupId-opcional>`
 

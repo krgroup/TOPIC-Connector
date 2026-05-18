@@ -20,7 +20,7 @@ cp .env.production.example .env.production
 # ArcGIS login gate (required for UI access control):
 # - ARCGIS_AUTH_ENABLED=true
 # - ARCGIS_PORTAL_URL=https://gis.eiteldata.eu/arcgis
-# - ARCGIS_REDIRECT_URI=https://gis.eiteldata.eu/conectoruc3m/
+# - ARCGIS_REDIRECT_URI=https://gis.eiteldata.eu/<nombre-conector>/
 nano .env.production
 ```
 
