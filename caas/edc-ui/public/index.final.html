@@ -12,14 +12,13 @@
     <aside class="sidebar">
       <div class="brand">
         <img src="assets/eitel-logo-brand.png" alt="EITEL" />
-        <div>
-          <div id="brandTitle">Conector EITEL</div>
-          <div class="sub" id="brandSub">Consola de operación</div>
-        </div>
-      </div>
+        <p>
+          En produccion, el acceso a esta consola requiere iniciar sesion en ArcGIS Enterprise.
+          Si no aparece el boton de inicio de sesion, falta configuracion del portal en el entorno.
+        </p>
 
-      <div class="nav">
-        <div class="nav-group">
+          <button class="primary" id="btnArcgisLogin">Iniciar sesion en ArcGIS Enterprise</button>
+          <button class="ghost" id="btnArcgisCheck">Ya inicie sesion, revalidar</button>
           <div class="nav-group-title">Centro de control</div>
           <button class="active" data-view="dashboard"><svg viewBox="0 0 24 24"><path d="M3 10.5 12 3l9 7.5"/><path d="M5 9.5V21h14V9.5"/></svg><span>Dashboard</span></button>
           <button data-view="star-trust"><svg viewBox="0 0 24 24"><path d="M12 3 4.5 7v5c0 4.6 3.1 8.1 7.5 9 4.4-.9 7.5-4.4 7.5-9V7z"/><path d="M9 12.5 11 14.5 15.5 10"/></svg><span>Star Trust</span></button>
@@ -718,8 +717,8 @@
       <h2>Acceso ArcGIS</h2>
       <p class="auth-help">Esta ventana solo se usa cuando quieres publicar un asset desde ArcGIS o pedir un token del portal. La consola puede funcionar sin iniciar sesión en ArcGIS.</p>
       <div class="row" style="margin-top:12px">
-        <button class="primary" id="btnArcgisLogin">Entrar con ArcGIS Enterprise</button>
-        <button class="ghost" id="btnArcgisCheck">Ya inicie sesion</button>
+        <button class="primary" id="btnArcgisLoginGate">Entrar con ArcGIS Enterprise</button>
+        <button class="ghost" id="btnArcgisCheckGate">Ya inicie sesion</button>
       </div>
       <div class="auth-error" id="authError" style="display:none"></div>
     </div>
@@ -804,7 +803,7 @@
   </div>
 
     <script src="config.js?v=20260410d"></script>
-  <script src="assets/ui/01-runtime.js?v=20260410g"></script>
+  <script src="assets/ui/01-runtime.js?v=20260518c"></script>
     <script src="assets/ui/02-operations.js?v=20260518b"></script>
   <script src="assets/ui/03-secrets.js?v=20260410g"></script>
     <script src="assets/ui/04-bootstrap.js?v=20260518b"></script>

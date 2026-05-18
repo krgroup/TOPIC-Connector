@@ -217,11 +217,13 @@
 
     function showAuthGate(message = '', canLogin = true) {
       const gate = document.getElementById('authGate');
-      const loginBtn = document.getElementById('btnArcgisLogin');
+      const loginBtn = document.getElementById('btnArcgisLoginGate');
+      const checkBtn = document.getElementById('btnArcgisCheckGate');
       const errorBox = document.getElementById('authError');
       if (!gate || !loginBtn || !errorBox) return;
       gate.classList.add('open');
       loginBtn.style.display = canLogin ? 'inline-flex' : 'none';
+      if (checkBtn) checkBtn.style.display = canLogin ? 'inline-flex' : 'none';
       if (message) {
         errorBox.textContent = message;
         errorBox.style.display = 'block';
@@ -315,9 +317,13 @@
       const checkBtn = document.getElementById('btnArcgisCheck');
       if (loginBtn) loginBtn.onclick = startArcgisLogin;
       if (checkBtn) checkBtn.onclick = () => ensureArcgisLogin();
+      const loginBtnGate = document.getElementById('btnArcgisLoginGate');
+      const checkBtnGate = document.getElementById('btnArcgisCheckGate');
+      if (loginBtnGate) loginBtnGate.onclick = startArcgisLogin;
+      if (checkBtnGate) checkBtnGate.onclick = () => ensureArcgisLogin();
 
       if (!arcgis.portalUrl) {
-        showAuthGate('ArcGIS login activo pero falta configurar ARCGIS_PORTAL_URL en el entorno.', false);
+        showAuthGate('ArcGIS login activo pero falta configurar ARCGIS_PORTAL_URL (y normalmente ARCGIS_CLIENT_ID y ARCGIS_REDIRECT_URI) en .env.production.', false);
         return false;
       }
 
