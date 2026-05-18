@@ -67,6 +67,7 @@ services:
       NEXT_PUBLIC_MANAGEMENT_API_AUTH_KEY: change-me
       NEXT_PUBLIC_CONNECTOR_NAME: conectoruc3m
       NEXT_PUBLIC_DSP_URL: http://conectoruc3m:11003/api/v1/dsp/2025-1
+      NEXT_PUBLIC_ARCGIS_AUTH_ENABLED: "false"
     volumes:
       - ./caas/edc-ui/public/index.final.html:/usr/share/nginx/html/index.final.html:ro
       - ./caas/edc-ui/public/index.final.html:/usr/share/nginx/html/index.html:ro
