@@ -1,6 +1,39 @@
 ﻿function openSettings() { settingsModal.classList.add('open'); }
     function closeSettings() { settingsModal.classList.remove('open'); }
 
+    function applyProjectVariantUi() {
+      const starNav = document.querySelector('.nav button[data-view="star-trust"]');
+      const starPanel = document.getElementById('panel-star-trust');
+      const starEnabled = Boolean(starTrustConfig?.enabled);
+      if (starNav) starNav.style.display = starEnabled ? '' : 'none';
+      if (starPanel) starPanel.style.display = starEnabled ? '' : 'none';
+      if (!starEnabled && starNav?.classList.contains('active')) activateView('dashboard');
+
+      const arcgisEnabled = Boolean(arcgis?.enabled);
+      [
+        'arcgisTokenWidget',
+        'btnArcgisLogout',
+        'arcgisPublishAssist',
+        'arcgisUploadWrap',
+      ].forEach((id) => {
+        const el = document.getElementById(id);
+        if (el && !arcgisEnabled) el.style.display = 'none';
+      });
+
+      const arcgisAuthOption = document.querySelector('#pubAuthType option[value="arcgis-login"]');
+      if (arcgisAuthOption) arcgisAuthOption.hidden = !arcgisEnabled;
+      const authType = document.getElementById('pubAuthType');
+      if (!arcgisEnabled && authType?.value === 'arcgis-login') authType.value = 'none';
+
+      const arcgisTransferOption = document.querySelector('#transferMode option[value="arcgis-upload"]');
+      if (arcgisTransferOption) arcgisTransferOption.hidden = !arcgisEnabled;
+      const transferMode = document.getElementById('transferMode');
+      if (!arcgisEnabled && transferMode?.value === 'arcgis-upload') transferMode.value = 'push';
+
+      const authGate = document.getElementById('authGate');
+      if (authGate && !arcgisEnabled) authGate.classList.remove('open');
+    }
+
     function bindEvents() {
       document.querySelectorAll('.nav button[data-view]').forEach(btn => btn.onclick = () => activateView(btn.dataset.view));
 
@@ -247,6 +280,7 @@
       document.getElementById('btnEitelCatalogo').onclick = () => window.open('https://uc3m-espacioeitel.hub.arcgis.com/search', '_blank');
       updateAssetPreview();
       loadSettings();
+      applyProjectVariantUi();
       bindEvents();
       
       // Inicializar URL DSP con el valor por defecto
@@ -259,9 +293,13 @@
       if (typeof syncAssetSourceModeUi === 'function') syncAssetSourceModeUi();
       if (typeof applyAuthTypeForm === 'function') applyAuthTypeForm();
       if (typeof syncTransferModeUi === 'function') syncTransferModeUi();
+      applyProjectVariantUi();
       if (typeof ensureArcgisTokenIndicatorTimer === 'function') ensureArcgisTokenIndicatorTimer();
       if (typeof refreshArcgisTokenIndicator === 'function') refreshArcgisTokenIndicator();
       if (typeof refreshStarTrustPanel === 'function') refreshStarTrustPanel();
+      if (arcgis?.enabled && arcgis?.requiresLogin && typeof ensureArcgisLogin === 'function') {
+        ensureArcgisLogin();
+      }
       applySettings();
 
       refreshOverview();

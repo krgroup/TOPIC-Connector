@@ -6,6 +6,7 @@ window.EITEL_UI_CONFIG = {
   connectorCatalogList: "${NEXT_PUBLIC_CONNECTOR_CATALOG_LIST}",
   defaultRemoteConnector: "${NEXT_PUBLIC_DEFAULT_REMOTE_CONNECTOR}",
   connectorDirectory: ${NEXT_PUBLIC_CONNECTOR_DIRECTORY},
+  uiVariant: "${NEXT_PUBLIC_UI_VARIANT}",
   starMode: "${NEXT_PUBLIC_STAR_MODE}",
   starCoordinatorName: "${NEXT_PUBLIC_STAR_COORDINATOR_NAME}",
   starCoordinatorUrl: "${NEXT_PUBLIC_STAR_COORDINATOR_URL}",

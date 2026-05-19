@@ -5,6 +5,9 @@
     const role = connectorName.toLowerCase().includes('provider') ? 'Provider' : (connectorName.toLowerCase().includes('consumer') ? 'Consumer' : 'Connector');
 
     const isTruthy = (value) => ['1', 'true', 'yes', 'on'].includes(String(value || '').toLowerCase());
+    const configuredUiVariant = String(cfg.uiVariant || '').trim().toLowerCase();
+    const uiVariant = configuredUiVariant || (isTruthy(cfg.starMode) || connectorName.toLowerCase().includes('star') ? 'star' : 'production');
+    const arcgisEnabledRaw = String(cfg.arcgisAuthEnabled || '').trim();
     const normalizePortalUrl = (url) => {
       let normalized = String(url || '').trim();
       normalized = normalized.replace(/\/+$/, '');
@@ -13,12 +16,13 @@
       return normalized;
     };
     const arcgis = {
-      enabled: isTruthy(cfg.arcgisAuthEnabled || 'true'),
+      enabled: arcgisEnabledRaw ? isTruthy(arcgisEnabledRaw) : uiVariant !== 'star',
       portalUrl: normalizePortalUrl(cfg.arcgisPortalUrl),
       clientId: (cfg.arcgisClientId || '').trim(),
       redirectUri: (cfg.arcgisRedirectUri || '').trim(),
       requiredOrgId: (cfg.arcgisRequiredOrgId || '').trim(),
       requiredGroupId: (cfg.arcgisRequiredGroupId || '').trim(),
+      requiresLogin: uiVariant === 'production',
     };
     const authState = { username: '', orgId: '' };
     const arcgisTokenStorageKey = 'eitel.arcgis.access_token';
@@ -220,6 +224,12 @@
       const loginBtn = document.getElementById('btnArcgisLogin');
       const errorBox = document.getElementById('authError');
       if (!gate || !loginBtn || !errorBox) return;
+      const help = gate.querySelector('.auth-help');
+      if (help) {
+        help.textContent = arcgis.requiresLogin
+          ? 'Para acceder a este conector de producción inicia sesión con ArcGIS Enterprise. La consola validará la sesión del portal antes de operar.'
+          : 'Esta ventana solo se usa cuando quieres publicar un asset desde ArcGIS o pedir un token del portal. La consola puede funcionar sin iniciar sesión en ArcGIS.';
+      }
       gate.classList.add('open');
       loginBtn.style.display = canLogin ? 'inline-flex' : 'none';
       if (message) {
@@ -324,8 +334,10 @@
       try {
         const appHost = window.location.host;
         const portalHost = new URL(arcgis.portalUrl).host;
+        const pathParts = (window.location.pathname || '/').split('/').filter(Boolean);
+        const connectorPrefix = pathParts[0] || cfg.connectorName || 'conectoruc3m';
         if (appHost !== portalHost) {
-          showAuthGate(`Host distinto detectado. Abre la consola en https://${portalHost}/conectoruc3m/ para reutilizar la sesion del portal. Host actual: ${appHost}`, true);
+          showAuthGate(`Host distinto detectado. Abre la consola en https://${portalHost}/${connectorPrefix}/ para reutilizar la sesion del portal. Host actual: ${appHost}`, true);
           return false;
         }
       } catch {}
@@ -360,7 +372,9 @@
         return true;
       } catch (e) {
         clearStoredArcgisToken();
-        showAuthGate(`Inicia sesion en ArcGIS Enterprise para acceder.\n${String(e?.message || e)}\nTip: accede siempre por https://gis.eiteldata.eu/conectoruc3m/`, true);
+        const pathParts = (window.location.pathname || '/').split('/').filter(Boolean);
+        const connectorPrefix = pathParts[0] || cfg.connectorName || 'conectoruc3m';
+        showAuthGate(`Inicia sesion en ArcGIS Enterprise para acceder.\n${String(e?.message || e)}\nTip: accede siempre por https://gis.eiteldata.eu/${connectorPrefix}/`, true);
         return false;
       }
     }

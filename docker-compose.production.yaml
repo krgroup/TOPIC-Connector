@@ -1,3 +1,5 @@
+# Cargar variables de producción con:
+# docker compose --env-file .env.production -f docker-compose.production.yaml up -d
 services:
   edc-postgres:
     image: postgres:15-alpine
@@ -77,6 +79,8 @@ services:
       NEXT_PUBLIC_MANAGEMENT_API_AUTH_KEY: ${EDC_API_AUTH_KEY}
       NEXT_PUBLIC_CONNECTOR_NAME: conectoruc3m
       NEXT_PUBLIC_DSP_URL: https://gis.eiteldata.eu/conectoruc3m/api/v1/dsp/2025-1
+      NEXT_PUBLIC_UI_VARIANT: production
+      NEXT_PUBLIC_STAR_MODE: "false"
       NEXT_PUBLIC_ARCGIS_AUTH_ENABLED: ${ARCGIS_AUTH_ENABLED:-true}
       NEXT_PUBLIC_ARCGIS_PORTAL_URL: ${ARCGIS_PORTAL_URL:-}
       NEXT_PUBLIC_ARCGIS_CLIENT_ID: ${ARCGIS_CLIENT_ID:-}
