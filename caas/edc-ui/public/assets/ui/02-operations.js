@@ -1128,7 +1128,7 @@ function summarizePolicyTerms(policyObj) {
           let text = await res.text();
 
           // Some deployments return 502 on one connector-prefix variant; try alternates for catalog calls.
-          if (res.status === 502 && (path === '/v1/catalog' || path === '/v3/catalog/request') && !options.noAutoBaseFallback) {
+          if (res.status === 502 && isCatalogRequestPath(path) && !options.noAutoBaseFallback) {
             const candidates = [];
             const fixed = getAutoFixedApiBaseUrl();
             if (fixed) candidates.push(fixed);
@@ -4899,6 +4899,25 @@ function summarizePolicyTerms(policyObj) {
       return rows;
     }
 
+    function isCatalogRequestPath(path) {
+      return ['/v2/catalog', '/v1/catalog', '/v3/catalog/request'].includes(String(path || ''));
+    }
+
+    async function callCatalogRequest(body) {
+      const payload = typeof body === 'string' ? body : JSON.stringify(body);
+      const endpoints = ['/v2/catalog', '/v1/catalog', '/v3/catalog/request'];
+      let lastResponse = null;
+
+      for (const endpoint of endpoints) {
+        const response = await callApi('POST', endpoint, payload, { timeoutMs: 120000, retries: 1 });
+        response.catalogEndpoint = endpoint;
+        if (![404, 405].includes(Number(response?.status))) return response;
+        lastResponse = response;
+      }
+
+      return lastResponse || { status: 0, catalogEndpoint: endpoints[0], error: 'No se pudo consultar el catálogo.' };
+    }
+
     async function fetchCatalogRowsForConnector(connectorId) {
       const normalizedConnector = normalizeRemoteConnectorId(connectorId);
       const address = buildDspUrl(normalizedConnector);
@@ -4916,13 +4935,13 @@ function summarizePolicyTerms(policyObj) {
         return { response, rows, connectorId: normalizedConnector, address };
       }
 
-      const response = await callApi('POST', '/v1/catalog', JSON.stringify({
+      const response = await callCatalogRequest({
         '@context': { edc: 'https://w3id.org/edc/v0.0.1/ns/' },
         '@type': 'CatalogRequest',
         counterPartyId,
         counterPartyAddress: address,
         protocol: 'dataspace-protocol-http:2025-1'
-      }), { timeoutMs: 120000, retries: 1 });
+      });
       const rows = mapCatalogRowsFromResponse(response?.data || {}, normalizedConnector, address);
       return { response, rows, connectorId: normalizedConnector, address };
     }
@@ -5078,6 +5097,7 @@ function summarizePolicyTerms(policyObj) {
         connectorSummaries.push({
           connectorId,
           status: result?.response?.status || 0,
+          catalogEndpoint: result?.response?.catalogEndpoint || '',
           assets: (result.rows || []).length,
           dspUrl: result?.address || ''
         });
