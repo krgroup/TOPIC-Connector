@@ -867,6 +867,72 @@ async def reject_access_request(request_id: str, request: Request):
     return {'ok': True, 'requestId': target_request_id, 'status': updated['status'], 'item': updated}
 
 
+@app.post('/v1/local-assets/access-requests/{request_id}/withdraw')
+async def withdraw_access_request(request_id: str, request: Request):
+    target_request_id = str(request_id or '').strip()
+    if not target_request_id:
+        raise HTTPException(status_code=400, detail='requestId es obligatorio')
+
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        payload = {}
+
+    idx = next(
+        (i for i, item in enumerate(access_request_records) if str(item.get('requestId') or '').strip() == target_request_id),
+        -1,
+    )
+    if idx < 0:
+        raise HTTPException(status_code=404, detail='Solicitud no encontrada')
+
+    now_iso = datetime.now(UTC).isoformat()
+    current = access_request_records[idx]
+    updated = {
+        **current,
+        'status': 'withdrawn',
+        'updatedAt': now_iso,
+        'decisionAt': now_iso,
+        'decisionBy': str(payload.get('decisionBy') or '').strip(),
+        'decisionReason': str(payload.get('decisionReason') or '').strip(),
+    }
+    access_request_records[idx] = updated
+    _save_access_request_records()
+
+    return {'ok': True, 'requestId': target_request_id, 'status': updated['status'], 'item': updated}
+
+
+@app.post('/v1/local-assets/access-requests/{request_id}/revoke')
+async def revoke_access_request(request_id: str, request: Request):
+    target_request_id = str(request_id or '').strip()
+    if not target_request_id:
+        raise HTTPException(status_code=400, detail='requestId es obligatorio')
+
+    payload = await request.json()
+    if not isinstance(payload, dict):
+        payload = {}
+
+    idx = next(
+        (i for i, item in enumerate(access_request_records) if str(item.get('requestId') or '').strip() == target_request_id),
+        -1,
+    )
+    if idx < 0:
+        raise HTTPException(status_code=404, detail='Solicitud no encontrada')
+
+    now_iso = datetime.now(UTC).isoformat()
+    current = access_request_records[idx]
+    updated = {
+        **current,
+        'status': 'revoked',
+        'updatedAt': now_iso,
+        'decisionAt': now_iso,
+        'decisionBy': str(payload.get('decisionBy') or '').strip(),
+        'decisionReason': str(payload.get('decisionReason') or '').strip(),
+    }
+    access_request_records[idx] = updated
+    _save_access_request_records()
+
+    return {'ok': True, 'requestId': target_request_id, 'status': updated['status'], 'item': updated}
+
+
 @app.get('/v1/config')
 def get_config():
     return {

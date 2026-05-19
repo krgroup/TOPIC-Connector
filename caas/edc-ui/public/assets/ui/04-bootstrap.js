@@ -263,6 +263,8 @@
     // Solicitudes panel
     window.approveAccessRequest = approveAccessRequest;
     window.rejectAccessRequest = rejectAccessRequest;
+    window.withdrawAccessRequest = withdrawAccessRequest;
+    window.revokeAccessRequest = revokeAccessRequest;
 
     document.getElementById('btnRefreshSolicitudes')?.addEventListener('click', () => loadAccessRequestsPanel());
     document.getElementById('btnFilterSolicitudesAll')?.addEventListener('click', () => loadAccessRequestsPanel('all'));
@@ -315,12 +317,12 @@
         acceso: row.accessRequestStatus || 'sin solicitud',
         requestId: row.accessRequestId || '',
         offerId: row.offerId || '',
-        contratacion: row.offerId
-          ? 'Hay oferta de catálogo: puedes iniciar contratación.'
-          : 'El acceso puede estar concedido, pero todavía no hay oferta/policy de catálogo publicada para contratar desde EDC.',
-        siguientePaso: row.offerId
+        contratacion: typeof canUseCatalogRow === 'function' && canUseCatalogRow(row)
+          ? 'Puedes iniciar contratación. Si no hay offerId real, la UI usará la policy convencional publicada con el asset.'
+          : 'Todavía no puedes contratar este asset.',
+        siguientePaso: typeof canUseCatalogRow === 'function' && canUseCatalogRow(row)
           ? 'Selecciona el asset y pulsa Realizar contrato.'
-          : 'Publica o revisa ContractDefinition/Policy en el conector propietario y recarga catálogos.',
+          : 'Solicita acceso o espera la aprobación del propietario.',
       });
     };
     window.showAgreementDetail = (index) => showInfoPopup('Detalle de contrato', state.agreementRows[index] || {});

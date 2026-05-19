@@ -213,6 +213,47 @@ function summarizePolicyTerms(policyObj) {
       return descriptions[stateName] || '';
     }
 
+    function inferPolicyIdForAsset(assetId) {
+      const raw = String(assetId || '').trim();
+      if (!raw) return '';
+      const key = raw.replace(/^asset-/i, '');
+      return `policy-${key}`;
+    }
+
+    function canUseCatalogRow(row) {
+      if (!row) return false;
+      if (sameConnectorId(row.connectorId || row.assigner || '', cfg?.connectorName || PROD_CONNECTOR_ID)) return false;
+      const stateName = getCatalogRowState(row);
+      return stateName === 'public' || stateName === 'approved';
+    }
+
+    function ensureNegotiableCatalogRow(row) {
+      if (!row || !canUseCatalogRow(row)) return row;
+      if (row.offerId && row.policyRaw) return row;
+      const assetId = String(row.assetId || row.policyTarget || '').trim();
+      const policyId = String(row.offerId || inferPolicyIdForAsset(assetId)).trim();
+      const assigner = String(row.assigner || row.connectorId || 'provider').trim();
+      const policyRaw = row.policyRaw || {
+        '@id': policyId,
+        '@type': 'odrl:Offer',
+        assigner,
+        target: assetId,
+        permission: [{ action: 'use', target: assetId }],
+        prohibition: [],
+        obligation: [],
+      };
+      return {
+        ...row,
+        offerId: policyId,
+        policyTarget: row.policyTarget || assetId,
+        assigner,
+        policyRaw,
+        policySummary: row.policySummary || 'Oferta inferida desde asset publicado y policy convencional.',
+        catalogOfferResolved: Boolean(row.offerId),
+        catalogOfferInferred: !row.offerId,
+      };
+    }
+
     /**
      * Extracts standardized metadata from a dataset object.
      * Handles multiple metadata formats (DublinCore, EDC, EITEL properties) and consolidates keywords.
@@ -1724,8 +1765,7 @@ function summarizePolicyTerms(policyObj) {
         const isPrivate = normalizeAccessLevel(row.accessLevel || 'public') === 'private';
         const hasOffer = Boolean(row.offerId);
         const isOwn = stateName === 'own';
-        const accessGranted = stateName === 'approved' || stateName === 'public';
-        const canContract = hasOffer && !isOwn && (accessGranted || !isPrivate);
+        const canContract = canUseCatalogRow(row);
         const actionLabel = isOwn
           ? 'Asset propio'
           : (canContract
@@ -1794,12 +1834,11 @@ function summarizePolicyTerms(policyObj) {
       if (contractBox) contractBox.style.display = selected ? 'block' : 'none';
       const requestBtn = document.getElementById('btnRequestContract');
       const requestAccessBtn = document.getElementById('btnOpenAccessRequest');
-      const hasOffer = Boolean(selected?.offerId);
       const selectedState = selected ? getCatalogRowState(selected) : '';
-      if (requestBtn) requestBtn.style.display = selected && hasOffer && !isPrivate ? 'inline-flex' : 'none';
+      if (requestBtn) requestBtn.style.display = selected && canUseCatalogRow(selected) ? 'inline-flex' : 'none';
       if (requestAccessBtn) requestAccessBtn.style.display = selected && selectedState === 'no-access' ? 'inline-flex' : 'none';
       if (accept) {
-        if (isPrivate) {
+        if (isPrivate && selectedState !== 'approved') {
           accept.checked = false;
           accept.disabled = true;
         } else {
@@ -1979,7 +2018,11 @@ function summarizePolicyTerms(policyObj) {
       }
       tbody.innerHTML = items.map(req => {
         const status = req.status || 'pending';
-        const statusLabel = status === 'pending' ? 'Pendiente' : status === 'approved' ? 'Aprobada' : 'Rechazada';
+        const statusLabel = status === 'pending' ? 'Pendiente'
+          : status === 'approved' ? 'Aprobada'
+          : status === 'withdrawn' ? 'Retirada'
+          : status === 'revoked' ? 'Revocada'
+          : 'Rechazada';
         const statusStyle = status === 'pending'
           ? 'background:#fff3cd;color:#856404;padding:2px 7px;border-radius:4px;font-size:12px'
           : status === 'approved'
@@ -1988,7 +2031,10 @@ function summarizePolicyTerms(policyObj) {
         const date = req.createdAt ? new Date(req.createdAt).toLocaleDateString('es-ES') : '-';
         const actions = status === 'pending'
           ? `<button class="primary" style="font-size:12px;padding:3px 10px" onclick="window.approveAccessRequest('${htmlEscape(req.requestId)}')">Aprobar</button>
-             <button class="ghost" style="font-size:12px;padding:3px 10px;margin-left:4px" onclick="window.rejectAccessRequest('${htmlEscape(req.requestId)}')">Rechazar</button>`
+             <button class="ghost" style="font-size:12px;padding:3px 10px;margin-left:4px" onclick="window.rejectAccessRequest('${htmlEscape(req.requestId)}')">Rechazar</button>
+             <button class="ghost" style="font-size:12px;padding:3px 10px;margin-left:4px" onclick="window.withdrawAccessRequest('${htmlEscape(req.requestId)}')">Retirar</button>`
+          : status === 'approved'
+            ? `<button class="ghost" style="font-size:12px;padding:3px 10px" onclick="window.revokeAccessRequest('${htmlEscape(req.requestId)}')">Revocar</button>`
           : `<span class="muted" style="font-size:12px">${req.decisionReason ? htmlEscape(req.decisionReason) : '-'}</span>`;
         return `<tr>
           <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${htmlEscape(req.assetId || '')}">${htmlEscape(req.assetTitle || req.assetId || '-')}</td>
@@ -2018,6 +2064,30 @@ function summarizePolicyTerms(policyObj) {
       if (!requestId) return;
       const reason = window.prompt('Motivo de rechazo (opcional):') ?? '';
       const response = await callLocalAssetsApi('POST', `/access-requests/${encodeURIComponent(requestId)}/reject`, {
+        body: JSON.stringify({ decisionReason: reason }),
+        headers: { 'content-type': 'application/json' },
+      });
+      writeOut(response);
+      await loadAccessRequestsPanel();
+      refreshSolicitudesBadge();
+    }
+
+    async function withdrawAccessRequest(requestId) {
+      if (!requestId) return;
+      const reason = window.prompt('Motivo de retirada (opcional):') ?? '';
+      const response = await callLocalAssetsApi('POST', `/access-requests/${encodeURIComponent(requestId)}/withdraw`, {
+        body: JSON.stringify({ decisionReason: reason }),
+        headers: { 'content-type': 'application/json' },
+      });
+      writeOut(response);
+      await loadAccessRequestsPanel();
+      refreshSolicitudesBadge();
+    }
+
+    async function revokeAccessRequest(requestId) {
+      if (!requestId) return;
+      const reason = window.prompt('Motivo de revocación (opcional):') ?? '';
+      const response = await callLocalAssetsApi('POST', `/access-requests/${encodeURIComponent(requestId)}/revoke`, {
         body: JSON.stringify({ decisionReason: reason }),
         headers: { 'content-type': 'application/json' },
       });
@@ -4557,6 +4627,15 @@ function summarizePolicyTerms(policyObj) {
       const ownerEmail = (document.getElementById('assetOwnerEmail')?.value || '').trim().toLowerCase();
       const accessLevel = normalizeAccessLevel(document.getElementById('policyAccessLevel')?.value || 'public');
       const managedConnector = String(connectorName || '').trim();
+      if (accessLevel === 'private' && !ownerEmail) {
+        writeOut({ status: 400, error: 'Los assets privados necesitan Owner email para gestionar solicitudes de acceso.' });
+        showInfoPopup('Falta email del owner', {
+          assetId: id,
+          visibility: accessLevel,
+          message: 'Introduce Owner email antes de publicar un asset privado. Ese correo se usa para notificaciones SMTP y trazabilidad de permisos.',
+        });
+        return { status: 400 };
+      }
       if (!managedConnector || managedConnector.toLowerCase() === 'connector') {
         writeOut({
           status: 400,
@@ -5176,12 +5255,10 @@ function summarizePolicyTerms(policyObj) {
         counterPartyAddress: address,
       });
       rows = enrichCatalogRowsWithAccessRequests(rows, await fetchAccessRequestsForProviderAddress(address));
-      const catalog = await fetchRemoteCatalogOffers(normalizedConnector, address);
-      rows = mergeCatalogOffersIntoAssetRows(rows, catalog.rows);
-      response.catalogEndpoint = catalog.response?.catalogEndpoint || '';
-      response.catalogStatus = catalog.response?.status || 0;
-      response.catalogError = catalog.response?.error || catalog.response?.data?.error || catalog.response?.data?.message || '';
-      response.catalogOffers = catalog.rows.length;
+      response.catalogEndpoint = 'disabled';
+      response.catalogStatus = 'not-used';
+      response.catalogError = '';
+      response.catalogOffers = 0;
       return { response, rows, connectorId: normalizedConnector, address };
     }
 
@@ -5401,7 +5478,7 @@ function summarizePolicyTerms(policyObj) {
       }
       if (!state.catalogRows.length) await loadCatalogShowcase(false);
 
-      const selected = state.catalogRows[Number(selectedIdxRaw)];
+      let selected = state.catalogRows[Number(selectedIdxRaw)];
       if (!selected) {
         writeOut({ status: 404, error: 'No se encontró ese asset en el catálogo.' });
         if (actionBtn) {
@@ -5411,7 +5488,8 @@ function summarizePolicyTerms(policyObj) {
         return;
       }
 
-      if (normalizeAccessLevel(selected.accessLevel || 'public') === 'private') {
+      const selectedState = getCatalogRowState(selected);
+      if (normalizeAccessLevel(selected.accessLevel || 'public') === 'private' && selectedState !== 'approved') {
         openAccessRequestModalForRow(selected);
         if (actionBtn) {
           actionBtn.disabled = false;
@@ -5420,6 +5498,30 @@ function summarizePolicyTerms(policyObj) {
         writeOut({ status: 403, error: 'Este asset es privado. Debes solicitar acceso al propietario.' });
         return;
       }
+
+      if (!canUseCatalogRow(selected)) {
+        showInfoPopup('No puedes contratar este asset todavía', {
+          assetId: selected.assetId || '',
+          estado: selectedState,
+          visibility: selected.accessLevel || '',
+          reason: selectedState === 'own'
+            ? 'Es un asset propio. Aparece en catálogo para trazabilidad, pero no se contrata desde el mismo conector.'
+            : 'Todavía no tienes permiso para contratar este asset.',
+          nextStep: selectedState === 'no-access' ? 'Solicita acceso al propietario.' : 'Revisa el estado de la solicitud.',
+        });
+        if (actionBtn) {
+          actionBtn.disabled = false;
+          actionBtn.textContent = 'Realizar contrato';
+        }
+        return;
+      }
+
+      selected = ensureNegotiableCatalogRow(selected);
+      state.catalogRows[Number(selectedIdxRaw)] = selected;
+      refreshCatalogAssetOptions();
+      const select = document.getElementById('catalogAssetId');
+      if (select) select.value = selectedIdxRaw;
+      syncCatalogSelectionState();
 
       if (starTrustConfig.enabled) {
         starTrustState.lastCounterParty = selected.connectorId || selected.assigner || '';
@@ -5430,8 +5532,12 @@ function summarizePolicyTerms(policyObj) {
       }
 
       if (!selected.offerId) {
-        openAccessRequestModalForRow(selected);
-        writeOut({ status: 202, message: 'Este asset no tiene oferta negociable activa. Se abre la solicitud de acceso al propietario.', selected });
+        showInfoPopup('No hay oferta contractual', {
+          assetId: selected.assetId || '',
+          connector: selected.connectorId || selected.assigner || '',
+          message: 'No se pudo inferir policy/offer para iniciar la negociación.',
+        });
+        writeOut({ status: 400, error: 'No se pudo inferir policy/offer para iniciar la negociación.', selected });
         if (actionBtn) {
           actionBtn.disabled = false;
           actionBtn.textContent = 'Realizar contrato';
