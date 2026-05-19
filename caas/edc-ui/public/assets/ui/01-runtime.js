@@ -231,7 +231,8 @@
           : 'Esta ventana solo se usa cuando quieres publicar un asset desde ArcGIS o pedir un token del portal. La consola puede funcionar sin iniciar sesión en ArcGIS.';
       }
       gate.classList.add('open');
-      loginBtn.style.display = canLogin ? 'inline-flex' : 'none';
+      loginBtn.style.display = (canLogin || arcgis.requiresLogin) ? 'inline-flex' : 'none';
+      loginBtn.disabled = false;
       if (message) {
         errorBox.textContent = message;
         errorBox.style.display = 'block';
@@ -300,7 +301,7 @@
 
     function startArcgisLogin() {
       if (!arcgis.portalUrl) {
-        showAuthGate('Falta configurar ARCGIS_PORTAL_URL.', false);
+        showAuthGate('Falta configurar ARCGIS_PORTAL_URL en .env.production. El botón estará disponible en cuanto el contenedor reciba esa variable.', true);
         return;
       }
       const clientId = arcgis.clientId || 'arcgisonline';
@@ -327,7 +328,7 @@
       if (checkBtn) checkBtn.onclick = () => ensureArcgisLogin();
 
       if (!arcgis.portalUrl) {
-        showAuthGate('ArcGIS login activo pero falta configurar ARCGIS_PORTAL_URL en el entorno.', false);
+        showAuthGate('ArcGIS login activo pero falta configurar ARCGIS_PORTAL_URL en el entorno. Revisa que el despliegue cargue .env.production con --env-file.', true);
         return false;
       }
 
@@ -342,7 +343,7 @@
         }
       } catch {}
 
-      showAuthGate('Comprobando sesion ArcGIS Enterprise...', false);
+      showAuthGate('Comprobando sesion ArcGIS Enterprise...', true);
 
       const tokenFromHash = extractArcgisTokenFromHash();
       const accessToken = tokenFromHash || getStoredArcgisToken();
