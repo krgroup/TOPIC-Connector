@@ -4900,7 +4900,7 @@ function summarizePolicyTerms(policyObj) {
     }
 
     async function fetchCatalogRowsForConnector(connectorId) {
-      const normalizedConnector = String(connectorId || getDefaultRemoteConnector()).trim() || getDefaultRemoteConnector();
+      const normalizedConnector = normalizeRemoteConnectorId(connectorId);
       const address = buildDspUrl(normalizedConnector);
       const counterPartyId = resolveCounterPartyId(normalizedConnector, address);
       const response = await callApi('POST', '/v3/catalog/request', JSON.stringify({
@@ -4961,6 +4961,14 @@ function summarizePolicyTerms(policyObj) {
         .map(v => String(v || '').trim())
         .filter(Boolean);
       return candidates[0] || 'conectoruc3m';
+    }
+
+    function normalizeRemoteConnectorId(connectorId) {
+      const raw = String(connectorId || '').trim();
+      if (!raw) return getDefaultRemoteConnector();
+      const lower = raw.toLowerCase();
+      if (lower === 'provider' || lower === 'consumer') return getDefaultRemoteConnector();
+      return canonicalConnectorPrefix(raw);
     }
 
     // Construir URL DSP absoluta en base al conector remoto indicado por el usuario.
