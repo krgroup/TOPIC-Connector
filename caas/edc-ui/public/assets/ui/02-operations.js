@@ -315,7 +315,7 @@ function summarizePolicyTerms(policyObj) {
       if (normalizeAccessLevel(row?.accessLevel || 'public') === 'private') return false;
       const stateName = getCatalogRowState(row);
       if (!(stateName === 'public' || stateName === 'approved')) return false;
-      return hasNegotiableCatalogOffer(row);
+      return hasNegotiableCatalogOffer(row) || hasManagementPublishedOffer(row);
     }
 
     function hasNegotiableCatalogOffer(row) {
@@ -323,6 +323,11 @@ function summarizePolicyTerms(policyObj) {
       if (!row.offerId || !row.policyRaw) return false;
       if (!row.catalogOfferResolved) return false;
       return String(row.catalogOfferSource || '').trim().toLowerCase() !== 'provider-management-fallback';
+    }
+
+    function hasManagementPublishedOffer(row) {
+      if (!row) return false;
+      return Boolean(row.managementPublishedOfferAvailable && row.managementOfferId && row.managementPolicyRaw);
     }
 
     function getCatalogContractAvailability(row) {
@@ -348,6 +353,14 @@ function summarizePolicyTerms(policyObj) {
           canContract: false,
           reason: 'Este asset es privado. Solo puede gestionarse mediante solicitud de acceso.',
           nextStep: stateName === 'approved' ? 'Cuando el proveedor publique una oferta DSP valida, podras contratarlo.' : 'Solicita acceso al propietario.',
+        };
+      }
+
+      if (hasManagementPublishedOffer(row)) {
+        return {
+          canContract: true,
+          reason: 'El proveedor tiene ContractDefinition y PolicyDefinition publicadas para este asset, aunque su catálogo DSP no esté devolviendo la oferta correctamente.',
+          nextStep: 'Selecciona el asset y pulsa Realizar contrato.',
         };
       }
 
@@ -5705,6 +5718,10 @@ function summarizePolicyTerms(policyObj) {
           ownerName: asset.ownerName || '',
           policySummary: policyRaw ? summarizePolicyTerms(policyRaw) : 'Asset visible en el catalogo, pendiente de oferta contractual o acceso.',
           policyRaw: null,
+          managementOfferId: String(policyRaw?.['@id'] || policyRaw?.id || policyId || '').trim(),
+          managementPolicyRaw: policyRaw,
+          managementContractDefinitionId: String(contractDef?.['@id'] || contractDef?.id || '').trim(),
+          managementPublishedOfferAvailable: Boolean(contractDef && policyId && policyRaw),
           sourceHintUrl: '',
           assetTitle: asset.title,
           assetDescription: asset.description,
@@ -6074,6 +6091,16 @@ function summarizePolicyTerms(policyObj) {
       });
 
       if (!match?.offerId || !match?.policyRaw) {
+        if (hasManagementPublishedOffer(row)) {
+          const managementResolution = await resolveCatalogOfferFromRemoteManagement(row);
+          if (managementResolution?.resolved) return managementResolution;
+          return {
+            row,
+            response: managementResolution?.response || result.response,
+            resolved: false,
+            reason: managementResolution?.response?.reason || 'El proveedor tiene publicación parcial, pero no se ha podido resolver una oferta contractual válida.',
+          };
+        }
         return {
           row,
           response: result.response,
