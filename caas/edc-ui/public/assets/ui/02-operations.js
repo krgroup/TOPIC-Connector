@@ -5611,18 +5611,13 @@ function summarizePolicyTerms(policyObj) {
         return { response, rows, connectorId: normalizedConnector, address };
       }
 
-      const response = await callConnectorManagementApi(normalizedConnector, 'POST', '/v3/assets/request', q());
-      response.assetEndpoint = '/v3/assets/request';
-      let rows = mapPublishedAssetsToCatalogVisualRows(unwrap(response), {
-        connectorId: normalizedConnector,
-        counterPartyAddress: address,
-      });
+      const { response, rows: dspRows, address: resolvedAddress } = await fetchRemoteCatalogOffers(normalizedConnector, address);
+      let rows = dspRows;
       rows = enrichCatalogRowsWithAccessRequests(rows, await fetchAccessRequestsForProviderAddress(address));
-      response.catalogEndpoint = 'disabled';
-      response.catalogStatus = 'not-used';
-      response.catalogError = '';
-      response.catalogOffers = 0;
-      return { response, rows, connectorId: normalizedConnector, address };
+      response.assetEndpoint = '';
+      response.catalogStatus = response?.status >= 200 && response?.status < 300 ? 'used' : 'error';
+      response.catalogOffers = rows.length;
+      return { response, rows, connectorId: normalizedConnector, address: resolvedAddress || address };
     }
 
     function ensureDspVersion(url) {
@@ -5841,13 +5836,11 @@ function summarizePolicyTerms(policyObj) {
       });
 
       if (!match?.offerId || !match?.policyRaw) {
-        const managementFallback = await resolveCatalogOfferFromRemoteManagement(row);
-        if (managementFallback?.resolved) return managementFallback;
         return {
           row,
           response: result.response,
           resolved: false,
-          reason: 'El asset existe en /v3/assets/request, pero no aparece como oferta negociable en el catalogo DSP.',
+          reason: 'El asset no aparece como oferta negociable en el catalogo DSP del proveedor.',
         };
       }
 
