@@ -314,7 +314,15 @@ function summarizePolicyTerms(policyObj) {
       if (sameConnectorId(row.connectorId || row.assigner || '', cfg?.connectorName || PROD_CONNECTOR_ID)) return false;
       if (normalizeAccessLevel(row?.accessLevel || 'public') === 'private') return false;
       const stateName = getCatalogRowState(row);
-      return stateName === 'public' || stateName === 'approved';
+      if (!(stateName === 'public' || stateName === 'approved')) return false;
+      return hasNegotiableCatalogOffer(row);
+    }
+
+    function hasNegotiableCatalogOffer(row) {
+      if (!row) return false;
+      if (!row.offerId || !row.policyRaw) return false;
+      if (!row.catalogOfferResolved) return false;
+      return String(row.catalogOfferSource || '').trim().toLowerCase() !== 'provider-management-fallback';
     }
 
     function ensureNegotiableCatalogRow(row) {
@@ -5327,6 +5335,9 @@ function summarizePolicyTerms(policyObj) {
             assetDescription: meta.description,
             assetKeywords: meta.keywords,
             assetImageUrl: meta.imageUrl,
+            catalogOfferResolved: Boolean(pol?.['@id'] || pol?.id),
+            catalogOfferInferred: false,
+            catalogOfferSource: 'dsp-catalog',
           };
         });
       }).filter(x => x.offerId || x.assetId);
@@ -5632,7 +5643,7 @@ function summarizePolicyTerms(policyObj) {
         const policyRaw = policyDefinition?.policy || policyDefinition?.['edc:policy'] || null;
 
         return {
-          offerId: String(policyRaw?.['@id'] || policyRaw?.id || policyId || '').trim(),
+          offerId: '',
           assetId,
           policyTarget: assetId,
           assigner: connectorId,
@@ -5642,15 +5653,15 @@ function summarizePolicyTerms(policyObj) {
           ownerEmail: asset.ownerEmail || '',
           ownerName: asset.ownerName || '',
           policySummary: policyRaw ? summarizePolicyTerms(policyRaw) : 'Asset visible en el catalogo, pendiente de oferta contractual o acceso.',
-          policyRaw,
+          policyRaw: null,
           sourceHintUrl: '',
           assetTitle: asset.title,
           assetDescription: asset.description,
           assetKeywords: asset.keywords,
           assetImageUrl: asset.imageUrl,
-          catalogOfferResolved: Boolean(policyRaw && policyId),
+          catalogOfferResolved: false,
           catalogOfferInferred: false,
-          catalogOfferSource: policyRaw ? 'provider-management-fallback' : 'provider-management-assets',
+          catalogOfferSource: 'provider-management-assets',
         };
       }).filter(Boolean);
 
@@ -5764,17 +5775,26 @@ function summarizePolicyTerms(policyObj) {
       }
 
       const dspResult = await fetchRemoteCatalogOffers(normalizedConnector, address);
+      const managementResult = await fetchRemoteCatalogRowsFromManagement(normalizedConnector, address);
       let response = dspResult.response;
       let rows = dspResult.rows || [];
       let resolvedAddress = dspResult.address || address;
 
-      if (!(response?.status >= 200 && response?.status < 300) || !rows.length) {
-        const managementResult = await fetchRemoteCatalogRowsFromManagement(normalizedConnector, address);
-        if ((managementResult?.rows || []).length) {
-          response = managementResult.response;
-          rows = managementResult.rows;
-          resolvedAddress = managementResult.address || resolvedAddress;
-        }
+      if ((managementResult?.rows || []).length) {
+        rows = mergeCatalogOffersIntoAssetRows(managementResult.rows, dspResult.rows || []);
+        resolvedAddress = managementResult.address || resolvedAddress;
+        response = {
+          ...(managementResult.response || {}),
+          dspStatus: dspResult?.response?.status || 0,
+          dspCatalogEndpoint: dspResult?.response?.catalogEndpoint || '',
+          dspCatalogOffers: Array.isArray(dspResult?.rows) ? dspResult.rows.length : 0,
+          catalogEndpoint: (managementResult.response?.catalogEndpoint || 'provider-management-assets'),
+        };
+      } else if (!(response?.status >= 200 && response?.status < 300) || !rows.length) {
+        response = {
+          ...(response || {}),
+          catalogEndpoint: response?.catalogEndpoint || 'dsp-catalog',
+        };
       }
 
       rows = enrichCatalogRowsWithAccessRequests(rows, await fetchAccessRequestsForProviderAddress(address));
