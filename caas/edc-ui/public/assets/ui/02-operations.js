@@ -103,7 +103,7 @@ function summarizePolicyTerms(policyObj) {
 
       const sanitized = normalizeNode(policyInput || {}, { forceAssetTarget: false }) || {};
       sanitized['@id'] = String(policyId || sanitized['@id'] || '').trim();
-      sanitized['@type'] = 'Set';
+      sanitized['@type'] = 'http://www.w3.org/ns/odrl/2/Set';
 
       delete sanitized['dct:accessRights'];
       delete sanitized['dct:purpose'];
@@ -2322,7 +2322,11 @@ function summarizePolicyTerms(policyObj) {
     function mapPublishedAssetsToCatalogVisualRows(rawAssets = [], options = {}) {
       const connectorId = options.connectorId || PROD_CONNECTOR_ID;
       const counterPartyAddress = options.counterPartyAddress || '';
-      return mapPublishedAssetRows(rawAssets).map((row) => ({
+      const allowedAssetIds = options.allowedAssetIds instanceof Set ? options.allowedAssetIds : null;
+      return mapPublishedAssetRows(rawAssets).filter((row) => {
+        if (!allowedAssetIds) return true;
+        return allowedAssetIds.has(String(row.id || '').trim());
+      }).map((row) => ({
         offerId: '',
         assetId: row.id || '',
         policyTarget: row.id || '',
@@ -5685,12 +5689,18 @@ function summarizePolicyTerms(policyObj) {
         // When querying the same connector that hosts this UI, use the local assets endpoint
         // instead of a remote catalog request. This avoids self-referential catalog dispatch
         // failures and matches the published assets available in the local connector.
-        const response = await callApi('POST', '/v3/assets/request', q(), { timeoutMs: 120000, retries: 1 });
+        const [response, contractsResponse] = await Promise.all([
+          callApi('POST', '/v3/assets/request', q(), { timeoutMs: 120000, retries: 1 }),
+          callApi('POST', '/v3/contractdefinitions/request', q(), { timeoutMs: 120000, retries: 0, silent: true })
+        ]);
         response.assetEndpoint = '/v3/assets/request';
+        const allowedAssetIds = new Set(unwrap(contractsResponse).map(contractDef => getContractDefinitionAssetId(contractDef)).filter(Boolean).map(id => String(id).trim()));
         const rows = mapPublishedAssetsToCatalogVisualRows(unwrap(response), {
           connectorId: normalizedConnector,
           counterPartyAddress: address,
+          allowedAssetIds,
         });
+        response.catalogOffers = rows.length;
         return { response, rows, connectorId: normalizedConnector, address };
       }
 
