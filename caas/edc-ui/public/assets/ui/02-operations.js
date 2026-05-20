@@ -38,10 +38,99 @@ function summarizePolicyTerms(policyObj) {
 
       const found = constraints.find(c => {
         const left = String(c?.leftOperand || c?.['odrl:leftOperand'] || '').trim().toLowerCase();
-        return left === 'dct:accessrights' || left === 'accessrights';
+        return left === 'dct:accessrights'
+          || left === 'accessrights'
+          || left === 'http://purl.org/dc/terms/accessrights'
+          || left === 'https://purl.org/dc/terms/accessrights';
       });
       const right = found?.rightOperand || found?.['odrl:rightOperand'] || policyObj?.['dct:accessRights'] || '';
       return normalizeAccessLevel(right || 'public');
+    }
+
+    function normalizePolicyOperandIri(value) {
+      const raw = String(value || '').trim();
+      if (!raw) return raw;
+      const normalized = raw.toLowerCase();
+      const map = {
+        'accessrights': 'http://purl.org/dc/terms/accessRights',
+        'dct:accessrights': 'http://purl.org/dc/terms/accessRights',
+        'http://purl.org/dc/terms/accessrights': 'http://purl.org/dc/terms/accessRights',
+        'https://purl.org/dc/terms/accessrights': 'http://purl.org/dc/terms/accessRights',
+        'dct:purpose': 'http://purl.org/dc/terms/purpose',
+        'http://purl.org/dc/terms/purpose': 'http://purl.org/dc/terms/purpose',
+        'dct:spatial': 'http://purl.org/dc/terms/spatial',
+        'http://purl.org/dc/terms/spatial': 'http://purl.org/dc/terms/spatial',
+        'dcat:theme': 'https://www.w3.org/ns/dcat#theme',
+        'https://www.w3.org/ns/dcat#theme': 'https://www.w3.org/ns/dcat#theme',
+        'eitel:commercialuse': 'https://w3id.org/eitel/ns/commercialUse',
+        'https://w3id.org/eitel/ns/commercialuse': 'https://w3id.org/eitel/ns/commercialUse',
+        'odrl:datetime': 'http://www.w3.org/ns/odrl/2/dateTime',
+        'http://www.w3.org/ns/odrl/2/datetime': 'http://www.w3.org/ns/odrl/2/dateTime',
+      };
+      return map[normalized] || raw;
+    }
+
+    function sanitizePolicyForStorage(policyInput, assetId, policyId) {
+      const normalizeNode = (node, options = {}) => {
+        if (Array.isArray(node)) return node.map(item => normalizeNode(item, options)).filter(item => item !== undefined);
+        if (!node || typeof node !== 'object') return node;
+
+        const result = {};
+        Object.entries(node).forEach(([key, value]) => {
+          if (key === '@context') return;
+
+          let normalizedKey = key.startsWith('odrl:') ? key.slice(5) : key;
+          let normalizedValue = normalizeNode(value, options);
+
+          if (normalizedKey === '@type' && typeof normalizedValue === 'string') {
+            normalizedValue = normalizedValue.replace(/^.*\//, '').replace(/^odrl:/i, '') || normalizedValue;
+          }
+          if (normalizedKey === 'leftOperand' && typeof normalizedValue === 'string') {
+            normalizedValue = normalizePolicyOperandIri(normalizedValue);
+          }
+          if ((normalizedKey === 'operator' || normalizedKey === 'action') && typeof normalizedValue === 'string') {
+            normalizedValue = normalizedValue.replace(/^odrl:/i, '');
+          }
+          if (normalizedKey === 'target' && options.forceAssetTarget) {
+            normalizedValue = assetId;
+          }
+
+          result[normalizedKey] = normalizedValue;
+        });
+
+        return result;
+      };
+
+      const sanitized = normalizeNode(policyInput || {}, { forceAssetTarget: false }) || {};
+      sanitized['@id'] = String(policyId || sanitized['@id'] || '').trim();
+      sanitized['@type'] = 'Set';
+
+      delete sanitized['dct:accessRights'];
+      delete sanitized['dct:purpose'];
+      delete sanitized['dct:spatial'];
+      delete sanitized['dcat:theme'];
+      delete sanitized['dct:validUntil'];
+
+      const normalizeRule = (rule) => {
+        const normalizedRule = normalizeNode(rule || {}, { forceAssetTarget: true }) || {};
+        normalizedRule.target = assetId;
+        if (!normalizedRule.action) normalizedRule.action = 'use';
+        const constraintsRaw = normalizedRule.constraint || [];
+        normalizedRule.constraint = (Array.isArray(constraintsRaw) ? constraintsRaw : [constraintsRaw]).filter(Boolean);
+        return normalizedRule;
+      };
+
+      const permissions = sanitized.permission || [];
+      sanitized.permission = (Array.isArray(permissions) ? permissions : [permissions]).filter(Boolean).map(normalizeRule);
+      if (!sanitized.permission.length) sanitized.permission = [{ action: 'use', target: assetId, constraint: [] }];
+
+      const prohibitions = sanitized.prohibition || [];
+      sanitized.prohibition = (Array.isArray(prohibitions) ? prohibitions : [prohibitions]).filter(Boolean).map(normalizeRule);
+
+      const obligations = sanitized.obligation || [];
+      sanitized.obligation = (Array.isArray(obligations) ? obligations : [obligations]).filter(Boolean).map(normalizeRule);
+
+      return sanitized;
     }
 
     /**
@@ -4491,7 +4580,7 @@ function summarizePolicyTerms(policyObj) {
       if (mode === 'jsonld') {
         const custom = parseJsonSafe(document.getElementById('policyCustomJson')?.value || '', null);
         if (!custom) throw new Error('Policy JSON-LD inválido');
-        return custom;
+        return sanitizePolicyForStorage(custom, assetId, policyId);
       }
 
       const accessLevel = (document.getElementById('policyAccessLevel')?.value || 'public').trim();
@@ -4507,35 +4596,24 @@ function summarizePolicyTerms(policyObj) {
       }
 
       const constraints = [];
-      constraints.push({ leftOperand: 'dct:accessRights', operator: 'eq', rightOperand: accessLevel });
-      constraints.push({ leftOperand: 'dct:purpose', operator: 'eq', rightOperand: purpose });
-      constraints.push({ leftOperand: 'dct:spatial', operator: 'eq', rightOperand: geography });
-      constraints.push({ leftOperand: 'dcat:theme', operator: 'eq', rightOperand: dataCategory });
-      constraints.push({ leftOperand: 'eitel:commercialUse', operator: 'eq', rightOperand: commercialUse });
-      if (expirationIso) constraints.push({ leftOperand: 'odrl:dateTime', operator: 'lteq', rightOperand: expirationIso });
+      constraints.push({ leftOperand: 'http://purl.org/dc/terms/accessRights', operator: 'eq', rightOperand: accessLevel });
+      constraints.push({ leftOperand: 'http://purl.org/dc/terms/purpose', operator: 'eq', rightOperand: purpose });
+      constraints.push({ leftOperand: 'http://purl.org/dc/terms/spatial', operator: 'eq', rightOperand: geography });
+      constraints.push({ leftOperand: 'https://www.w3.org/ns/dcat#theme', operator: 'eq', rightOperand: dataCategory });
+      constraints.push({ leftOperand: 'https://w3id.org/eitel/ns/commercialUse', operator: 'eq', rightOperand: commercialUse });
+      if (expirationIso) constraints.push({ leftOperand: 'http://www.w3.org/ns/odrl/2/dateTime', operator: 'lteq', rightOperand: expirationIso });
 
-      return {
-        '@context': {
-          odrl: 'http://www.w3.org/ns/odrl/2/',
-          dcat: 'https://www.w3.org/ns/dcat#',
-          dct: 'http://purl.org/dc/terms/',
-          eitel: 'https://w3id.org/eitel/ns/'
-        },
+      return sanitizePolicyForStorage({
         '@id': policyId,
-        '@type': 'http://www.w3.org/ns/odrl/2/Set',
-        'dct:accessRights': accessLevel,
-        'dct:purpose': purpose,
-        'dct:spatial': geography,
-        'dcat:theme': dataCategory,
-        ...(expirationIso ? { 'dct:validUntil': expirationIso } : {}),
+        '@type': 'Set',
         permission: [{
           action: 'use',
           target: assetId,
-          ...(constraints.length ? { constraint: constraints } : {})
+          constraint: constraints
         }],
         prohibition: [],
         obligation: []
-      };
+      }, assetId, policyId);
     }
 
     /**
@@ -4560,7 +4638,7 @@ function summarizePolicyTerms(policyObj) {
         '@context': { '@vocab': 'https://w3id.org/edc/v0.0.1/ns/' },
         '@id': policyId,
         '@type': 'PolicyDefinition',
-        policy
+        policy: sanitizePolicyForStorage(policy, assetId, policyId)
       };
       const response = await callApi('POST', '/v3/policydefinitions', JSON.stringify(body));
       if (response.status >= 200 && response.status < 300) {
@@ -5001,7 +5079,11 @@ function summarizePolicyTerms(policyObj) {
 
         const policyId = String(bundle?.policyId || bundle?.policyBody?.['@id'] || '').trim();
         if (policyId && bundle?.policyBody && !existingPolicies.has(policyId)) {
-          const policyResp = await callApi('POST', '/v3/policydefinitions', JSON.stringify(bundle.policyBody), { silent: true, retries: 0 });
+          const sanitizedPolicyBody = {
+            ...bundle.policyBody,
+            policy: sanitizePolicyForStorage(bundle?.policyBody?.policy || bundle?.policyBody?.['edc:policy'] || {}, assetId, policyId)
+          };
+          const policyResp = await callApi('POST', '/v3/policydefinitions', JSON.stringify(sanitizedPolicyBody), { silent: true, retries: 0 });
           if (policyResp.status >= 200 && policyResp.status < 300) existingPolicies.add(policyId);
         }
 
@@ -5186,9 +5268,7 @@ function summarizePolicyTerms(policyObj) {
       const contractDefId = document.getElementById('contractDefIdPreview')?.value;
       if (!policyId || !contractDefId) return { skipped: true };
 
-      const existingPolicies = unwrap(await callApi('POST', '/v3/policydefinitions/request', q()));
-      const policyExists = existingPolicies.some(p => (p['@id'] || p.id) === policyId);
-      const policyResult = policyExists ? { status: 200, data: { message: 'Policy existente', id: policyId } } : await createOrUpdatePolicy();
+      const policyResult = await createOrUpdatePolicy();
 
       const contractDefs = unwrap(await callApi('POST', '/v3/contractdefinitions/request', q()));
       const duplicateById = contractDefs.find(c => (c['@id'] || c.id) === contractDefId);
