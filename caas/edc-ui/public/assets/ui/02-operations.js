@@ -5659,30 +5659,18 @@ function summarizePolicyTerms(policyObj) {
     }
 
     async function fetchRemoteCatalogOffers(connectorId, address) {
-      const candidates = getEdcDspAddressCandidates(connectorId, address);
-      let best = null;
-
-      for (const candidateAddress of candidates) {
-        const counterPartyId = resolveCounterPartyId(connectorId, candidateAddress);
-        const response = await callCatalogRequest({
-          '@context': { edc: 'https://w3id.org/edc/v0.0.1/ns/' },
-          '@type': 'CatalogRequest',
-          counterPartyId,
-          counterPartyAddress: candidateAddress,
-          protocol: 'dataspace-protocol-http:2025-1'
-        });
-        response.triedCounterPartyAddress = candidateAddress;
-        response.triedCounterPartyAddresses = candidates;
-        const rows = response?.status >= 200 && response?.status < 300
-          ? mapCatalogRowsFromResponse(response?.data || {}, connectorId, candidateAddress)
-          : [];
-        const result = { response, rows, address: candidateAddress };
-        if (response?.status >= 200 && response?.status < 300 && rows.length) return result;
-        if (response?.status >= 200 && response?.status < 300 && !best) best = result;
-        if (!best || Number(response?.status || 0) < Number(best.response?.status || 999)) best = result;
-      }
-
-      return best || { response: { status: 0, error: 'No se pudo consultar el catalogo DSP.', triedCounterPartyAddresses: candidates }, rows: [], address: candidates[0] || address };
+      const counterPartyId = resolveCounterPartyId(connectorId, address);
+      const response = await callCatalogRequest({
+        '@context': { edc: 'https://w3id.org/edc/v0.0.1/ns/' },
+        '@type': 'CatalogRequest',
+        counterPartyId,
+        counterPartyAddress: address,
+        protocol: 'dataspace-protocol-http:2025-1'
+      });
+      const rows = response?.status >= 200 && response?.status < 300
+        ? mapCatalogRowsFromResponse(response?.data || {}, connectorId, address)
+        : [];
+      return { response, rows, address };
     }
 
     async function fetchRemoteCatalogRowsFromManagement(connectorId, address) {
@@ -5830,7 +5818,7 @@ function summarizePolicyTerms(policyObj) {
 
     async function fetchCatalogRowsForConnector(connectorId) {
       const normalizedConnector = normalizeRemoteConnectorId(connectorId);
-      const address = getPreferredEdcDspAddress(normalizedConnector, buildDspUrl(normalizedConnector));
+      const address = buildDspUrl(normalizedConnector);
       const currentCanonical = canonicalConnectorPrefix(cfg?.connectorName || '').toLowerCase();
       const targetCanonical = canonicalConnectorPrefix(normalizedConnector).toLowerCase();
       const isCurrentConnector = currentCanonical && targetCanonical && currentCanonical === targetCanonical;
@@ -5871,7 +5859,8 @@ function summarizePolicyTerms(policyObj) {
     function ensureDspVersion(url) {
       const trimmed = String(url || '').replace(/\/+$/, '');
       if (!trimmed) return trimmed;
-      if (/\/api\/v1\/dsp\/2025-1$/i.test(trimmed)) return trimmed.replace(/\/2025-1$/i, '');
+      if (/\/api\/v1\/dsp\/2025-1$/i.test(trimmed)) return trimmed;
+      if (/\/api\/v1\/dsp$/i.test(trimmed)) return `${trimmed}/2025-1`;
       return trimmed;
     }
 
@@ -5963,13 +5952,12 @@ function summarizePolicyTerms(policyObj) {
       const currentCanonical = canonicalConnectorPrefix(currentConnectorRaw).toLowerCase();
       const targetCanonical = canonicalConnectorPrefix(raw).toLowerCase();
 
-      // Si el usuario consulta el mismo conector que aloja esta UI, usar la URL pública
-      // con el prefijo de conector actual para que el navegador pueda resolverlo.
+      // Si el usuario consulta el mismo conector que aloja esta UI, usar DSP interno
+      // para evitar pasar por WAF/proxy publico y reducir 502 intermitentes.
       if (currentCanonical && targetCanonical && currentCanonical === targetCanonical) {
-        const connectorPrefix = canonicalConnectorPrefix(currentConnectorRaw);
-        const publicOrigin = getPublicConnectorOrigin();
-        if (connectorPrefix) {
-          return ensureDspVersion(`${publicOrigin}/${connectorPrefix}/api/v1/dsp`);
+        const internalHost = currentConnectorRaw.toLowerCase();
+        if (internalHost) {
+          return ensureDspVersion(`http://${internalHost}:11003/api/v1/dsp/2025-1`);
         }
       }
 
@@ -6094,7 +6082,7 @@ function summarizePolicyTerms(policyObj) {
       if (row.offerId && row.policyRaw && row.catalogOfferResolved) return { row, response: null, resolved: true };
 
       const connectorId = row.connectorId || row.assigner || getDefaultRemoteConnector();
-      const address = getPreferredEdcDspAddress(connectorId, row.counterPartyAddress || buildDspUrl(connectorId));
+      const address = row.counterPartyAddress || buildDspUrl(connectorId);
       const result = await fetchRemoteCatalogOffers(connectorId, address);
       const assetId = String(row.assetId || row.policyTarget || '').trim();
       const match = (result.rows || []).find(offer => {
@@ -6317,10 +6305,9 @@ function summarizePolicyTerms(policyObj) {
       policy.prohibition = policy.prohibition.map(normalizeRuleTarget);
       policy.obligation = policy.obligation.map(normalizeRuleTarget);
 
-      const negotiatedCounterPartyAddress = getPreferredEdcDspAddress(
-        selected.connectorId || selected.assigner,
-        selected.counterPartyAddress || document.getElementById('resolvedAddress').value || buildDspUrl(selected.connectorId || selected.assigner)
-      );
+      const negotiatedCounterPartyAddress = selected.counterPartyAddress
+        || document.getElementById('resolvedAddress').value
+        || buildDspUrl(selected.connectorId || selected.assigner);
       const negotiatedCounterPartyId = resolveCounterPartyId(selected.connectorId || selected.assigner || '', negotiatedCounterPartyAddress);
       const resolvedAddressInputForNegotiation = document.getElementById('resolvedAddress');
       if (resolvedAddressInputForNegotiation) resolvedAddressInputForNegotiation.value = negotiatedCounterPartyAddress;
