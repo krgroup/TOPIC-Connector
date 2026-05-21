@@ -311,11 +311,17 @@ function summarizePolicyTerms(policyObj) {
 
     function canUseCatalogRow(row) {
       if (!row) return false;
+      if (!canPrepareCatalogContract(row)) return false;
+      return hasNegotiableCatalogOffer(row);
+    }
+
+    function canPrepareCatalogContract(row) {
+      if (!row) return false;
       if (sameConnectorId(row.connectorId || row.assigner || '', cfg?.connectorName || PROD_CONNECTOR_ID)) return false;
       if (normalizeAccessLevel(row?.accessLevel || 'public') === 'private') return false;
       const stateName = getCatalogRowState(row);
       if (!(stateName === 'public' || stateName === 'approved')) return false;
-      return hasNegotiableCatalogOffer(row);
+      return true;
     }
 
     function hasNegotiableCatalogOffer(row) {
@@ -2026,7 +2032,7 @@ function summarizePolicyTerms(policyObj) {
       const contractHint = document.getElementById('catalogContractHint');
       const selectedState = selected ? getCatalogRowState(selected) : '';
       const availability = selected ? getCatalogContractAvailability(selected) : null;
-      if (requestBtn) requestBtn.style.display = selected && canUseCatalogRow(selected) ? 'inline-flex' : 'none';
+      if (requestBtn) requestBtn.style.display = selected && canPrepareCatalogContract(selected) ? 'inline-flex' : 'none';
       if (requestAccessBtn) requestAccessBtn.style.display = selected && !sameConnectorId(selected?.connectorId || selected?.assigner || '', cfg?.connectorName || PROD_CONNECTOR_ID) && normalizeAccessLevel(selected?.accessLevel || 'public') === 'private' ? 'inline-flex' : 'none';
       if (contractHint) {
         if (!selected) {
@@ -6086,7 +6092,7 @@ function summarizePolicyTerms(policyObj) {
     }
 
     async function resolveNegotiableCatalogOffer(row) {
-      if (!row || !canUseCatalogRow(row)) return { row, response: null, resolved: false };
+      if (!row || !canPrepareCatalogContract(row)) return { row, response: null, resolved: false };
       if (row.offerId && row.policyRaw && row.catalogOfferResolved) return { row, response: null, resolved: true };
 
       const connectorId = row.connectorId || row.assigner || getDefaultRemoteConnector();
@@ -6182,7 +6188,7 @@ function summarizePolicyTerms(policyObj) {
         return;
       }
 
-      if (!canUseCatalogRow(selected)) {
+      if (!canPrepareCatalogContract(selected)) {
         const availability = getCatalogContractAvailability(selected);
         showInfoPopup('No puedes contratar este asset todavía', {
           assetId: selected.assetId || '',
