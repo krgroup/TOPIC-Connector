@@ -5872,18 +5872,21 @@ function summarizePolicyTerms(policyObj) {
       }
 
       const counterPartyId = resolveCounterPartyId(normalizedConnector, address);
+      // Use a short timeout: DSP consistently fails with 5xx (JSON-LD compaction crash).
+      // We fall back to the management API anyway, so no point waiting 15 s.
       const response = await callApi('POST', '/v3/catalog/request', JSON.stringify({
         '@context': { edc: 'https://w3id.org/edc/v0.0.1/ns/' },
         '@type': 'CatalogRequest',
         counterPartyId,
         counterPartyAddress: address,
         protocol: 'dataspace-protocol-http:2025-1'
-      }), { noAutoBaseFallback: true });
+      }), { noAutoBaseFallback: true, timeoutMs: 5000, retries: 0, silent: true });
       response.catalogEndpoint = response?.catalogEndpoint || '/v3/catalog/request';
 
-      // DSP endpoint devolvio error de servidor (ej. JSON-LD compaction crash).
-      // Caemos al management API del proveedor para obtener los assets publicados.
-      if (response.status >= 500) {
+      // Fall back to the provider management API when:
+      //  - DSP returns a server error (5xx, e.g. JSON-LD compaction crash)
+      //  - DSP request timed out / network error (status === 0, AbortError)
+      if (response.status >= 500 || response.status === 0) {
         return await fetchRemoteCatalogRowsFromManagement(normalizedConnector, address);
       }
 
