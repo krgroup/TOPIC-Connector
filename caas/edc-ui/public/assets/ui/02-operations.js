@@ -1959,14 +1959,12 @@ function summarizePolicyTerms(policyObj) {
         const canContract = canUseCatalogRow(row);
         const actionLabel = isOwn
           ? 'Asset propio'
-          : (canContract
-            ? 'Iniciar contratacion'
-            : (stateName === 'no-access' ? 'Solicitar acceso' : 'Ver estado'));
-        const actionOnClick = canContract
-          ? `window.useCatalogAssetByIndex(${idx})`
+          : (stateName === 'no-access' ? 'Solicitar acceso' : 'Iniciar contratacion');
+        const actionOnClick = isOwn
+          ? `window.showCatalogAssetStatusByIndex(${idx})`
           : (stateName === 'no-access'
             ? `window.openAccessRequestByIndex(${idx})`
-            : `window.showCatalogAssetStatusByIndex(${idx})`);
+            : `window.useCatalogAssetByIndex(${idx})`);
         const stateLabel = htmlEscape(catalogStateLabel(stateName));
         const media = `<div class="asset-card-media${defaultImageClass}"><img src="${htmlEscape(image)}" alt="Imagen del asset ${title}" /><span class="asset-card-badge">${connectorBadge}</span><span class="asset-state-badge">${stateLabel}</span><div class="asset-card-media-overlay"><span class="asset-card-media-title">${title}</span></div></div>`;
         const chips = keywords.length
@@ -2025,9 +2023,20 @@ function summarizePolicyTerms(policyObj) {
       if (contractBox) contractBox.style.display = selected ? 'block' : 'none';
       const requestBtn = document.getElementById('btnRequestContract');
       const requestAccessBtn = document.getElementById('btnOpenAccessRequest');
+      const contractHint = document.getElementById('catalogContractHint');
       const selectedState = selected ? getCatalogRowState(selected) : '';
+      const availability = selected ? getCatalogContractAvailability(selected) : null;
       if (requestBtn) requestBtn.style.display = selected && canUseCatalogRow(selected) ? 'inline-flex' : 'none';
       if (requestAccessBtn) requestAccessBtn.style.display = selected && !sameConnectorId(selected?.connectorId || selected?.assigner || '', cfg?.connectorName || PROD_CONNECTOR_ID) && normalizeAccessLevel(selected?.accessLevel || 'public') === 'private' ? 'inline-flex' : 'none';
+      if (contractHint) {
+        if (!selected) {
+          contractHint.textContent = 'Selecciona un asset para preparar la contratación.';
+        } else if (availability?.canContract) {
+          contractHint.textContent = 'Este asset tiene una oferta DSP válida. Acepta los términos y pulsa Realizar contrato.';
+        } else {
+          contractHint.textContent = `${availability?.reason || 'Este asset todavía no se puede contratar.'} ${availability?.nextStep || ''}`.trim();
+        }
+      }
       if (accept) {
         if (isPrivate && selectedState !== 'approved') {
           accept.checked = false;
