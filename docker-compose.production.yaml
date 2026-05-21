@@ -76,7 +76,7 @@ services:
         required: false
     depends_on:
       conectoruc3m:
-        condition: service_healthy
+        condition: service_started
     environment:
       NEXT_PUBLIC_MANAGEMENT_API_URL: /conectoruc3m/api/management
       NEXT_PUBLIC_MANAGEMENT_API_AUTH_KEY: ${EDC_API_AUTH_KEY}

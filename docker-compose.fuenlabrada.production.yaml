@@ -76,7 +76,7 @@ services:
         required: false
     depends_on:
       conectorfuenlabrada:
-        condition: service_healthy
+        condition: service_started
     environment:
       NEXT_PUBLIC_MANAGEMENT_API_URL: /conectorFuenlabrada/api/management
       NEXT_PUBLIC_MANAGEMENT_API_AUTH_KEY: ${EDC_API_AUTH_KEY}

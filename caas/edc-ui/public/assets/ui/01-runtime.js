@@ -338,17 +338,26 @@
       } catch {}
     }
 
-    async function fetchArcgisJson(path, { token = '', useCookies = true } = {}) {
+    async function fetchArcgisJson(path, { token = '', useCookies = true, timeoutMs = 12000 } = {}) {
       const sep = path.includes('?') ? '&' : '?';
       const tokenPart = token ? `&token=${encodeURIComponent(token)}` : '';
       const url = `${arcgis.portalUrl}/sharing/rest/${path}${sep}f=json${tokenPart}`;
-      const res = await fetch(url, { credentials: useCookies ? 'include' : 'omit' });
-      const data = await res.json();
-      if (!res.ok || data?.error) {
-        const msg = data?.error?.message || `ArcGIS HTTP ${res.status}`;
-        throw new Error(msg);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), timeoutMs);
+      try {
+        const res = await fetch(url, { credentials: useCookies ? 'include' : 'omit', signal: controller.signal });
+        const data = await res.json();
+        if (!res.ok || data?.error) {
+          const msg = data?.error?.message || `ArcGIS HTTP ${res.status}`;
+          throw new Error(msg);
+        }
+        return data;
+      } catch (e) {
+        if (e?.name === 'AbortError') throw new Error('ArcGIS Enterprise no responde (timeout). Comprueba que el portal está accesible e inténtalo de nuevo.');
+        throw e;
+      } finally {
+        clearTimeout(timer);
       }
-      return data;
     }
 
     async function userIsInRequiredGroup(username, options = {}) {
