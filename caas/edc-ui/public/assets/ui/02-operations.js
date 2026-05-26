@@ -6313,8 +6313,7 @@ function summarizePolicyTerms(policyObj) {
     }
 
     function getEdcDspAddressCandidates(connectorId, address) {
-      const internal = resolveInternalDspUrl(connectorId);
-      return [...new Set([internal, ...getDspAddressCandidates(address)].filter(Boolean))];
+      return getDspAddressCandidates(address);
     }
 
     function getPreferredEdcDspAddress(connectorId, address) {
