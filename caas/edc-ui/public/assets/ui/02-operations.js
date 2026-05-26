@@ -7087,8 +7087,27 @@ function summarizePolicyTerms(policyObj) {
               downloadResp = hintedResp;
             }
           }
+          // Si no hay hint en memoria (contrato de sesiones previas o catálogo cargado sin negociación),
+          // consultar la Management API del proveedor para obtener la URL pública del asset.
+          if (downloadResp?.status === 404 && agreementAssetId && transferParty?.counterPartyId) {
+            const providerConnectorId = extractConnectorIdHint(transferParty.counterPartyId) || transferParty.counterPartyId;
+            const providerAssetResp = await callConnectorManagementApi(
+              providerConnectorId, 'GET', `/v3/assets/${encodeURIComponent(agreementAssetId)}`, undefined,
+              { timeoutMs: 5000, silent: true }
+            ).catch(() => null);
+            if (providerAssetResp?.status >= 200 && providerAssetResp?.status < 300) {
+              const derivedUrl = pickBestSourceUrl(collectUrlCandidatesFromObject(providerAssetResp.data));
+              if (derivedUrl) {
+                const providerHintResp = await downloadFromSourceHint(contractId, agreementAssetId, derivedUrl);
+                if (providerHintResp?.status >= 200 && providerHintResp?.status < 300) {
+                  downloadResp = providerHintResp;
+                }
+              }
+            }
+          }
         }
-        // Si el asset no existe localmente (contrato remoto), usar transferencia EDC al sink local.
+        // Si el asset no existe localmente y no se pudo obtener URL directa (asset privado o error de red),
+        // usar transferencia EDC al sink local como último recurso.
         if (downloadResp?.status === 404) {
           downloadResp = await downloadRemoteAssetViaTransfer(contractId, agreementAssetId, transferParty);
         }
@@ -7120,6 +7139,7 @@ function summarizePolicyTerms(policyObj) {
         await refreshOverview();
         await listTransfers();
         if (downloadResp.status >= 200 && downloadResp.status < 300) {
+          const isDirectDownload = downloadResp.downloaded === true;
           showInfoPopup('Descarga iniciada', {
             transferId: localTransfer.id,
             contractId,
@@ -7127,7 +7147,9 @@ function summarizePolicyTerms(policyObj) {
             filename: downloadResp.filename,
             bytes: downloadResp.bytes,
             sourceUrl: downloadResp.sourceUrl,
-            message: 'El navegador ha iniciado la descarga local. Normalmente se guardará en Descargas según tu configuración del navegador.'
+            message: isDirectDownload
+              ? 'El navegador ha iniciado la descarga local. Normalmente se guardará en Descargas según tu configuración del navegador.'
+              : 'Transferencia remota en curso. El archivo se descargará automáticamente cuando el servidor proveedor lo envíe al sink local (puede tardar unos segundos).'
           });
         } else {
           showInfoPopup('Error en descarga local', downloadResp);
