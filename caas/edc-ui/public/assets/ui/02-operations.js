@@ -6224,11 +6224,20 @@ function summarizePolicyTerms(policyObj) {
         return await fetchRemoteCatalogRowsFromManagement(normalizedConnector, address, { timeoutMs });
       }
 
-      const [managementSettled, offersSettled, requestsSettled, bundlesSettled] = await Promise.allSettled([
+      // For remote connectors: try /asset-bundles/public first (fast metadata-only endpoint),
+      // then complement with Management API + DSP offers in parallel
+      const bundleRowsSettled = await Promise.allSettled([
+        fetchProviderAssetBundleMetadata(address, { timeoutMs: Math.min(timeoutMs, 8000) }),
+      ]);
+      const bundleRows = bundleRowsSettled[0]?.status === 'fulfilled' && Array.isArray(bundleRowsSettled[0].value)
+        ? bundleRowsSettled[0].value
+        : [];
+
+      // If we got bundle rows, start complementing with Management API and access requests
+      const [managementSettled, offersSettled, requestsSettled] = await Promise.allSettled([
         fetchRemoteCatalogRowsFromManagement(normalizedConnector, address, { timeoutMs }),
         fetchRemoteCatalogOffers(normalizedConnector, address, { timeoutMs: catalogTimeoutMs, retries: 0, silent: true }),
         fetchAccessRequestsForProviderAddress(address, { timeoutMs: Math.min(timeoutMs, 5000) }),
-        fetchProviderAssetBundleMetadata(address, { timeoutMs: Math.min(timeoutMs, 5000) }),
       ]);
 
       const managementResult = managementSettled.status === 'fulfilled'
@@ -6240,24 +6249,31 @@ function summarizePolicyTerms(policyObj) {
       const accessRequests = requestsSettled.status === 'fulfilled' && Array.isArray(requestsSettled.value)
         ? requestsSettled.value
         : [];
-      const bundleRows = bundlesSettled.status === 'fulfilled' && Array.isArray(bundlesSettled.value)
-        ? bundlesSettled.value
-        : [];
 
       const managementRows = Array.isArray(managementResult?.rows) ? managementResult.rows : [];
       const offerRows = Array.isArray(offersResult?.rows) ? offersResult.rows : [];
-      let rows = managementRows.length ? mergeCatalogOffersIntoAssetRows(managementRows, offerRows) : offerRows;
-      if (!rows.length && bundleRows.length) {
-        rows = mapProviderAssetBundleMetadataToCatalogRows(bundleRows, normalizedConnector, address);
-      } else {
-        rows = mergeProviderAssetBundleMetadataIntoCatalogRows(rows, bundleRows);
+      
+      // Prefer bundleRows if we got them, otherwise use management rows
+      let rows = bundleRows.length
+        ? mapProviderAssetBundleMetadataToCatalogRows(bundleRows, normalizedConnector, address)
+        : (managementRows.length
+            ? mergeCatalogOffersIntoAssetRows(managementRows, offerRows)
+            : offerRows);
+      
+      // Merge management data if not already used
+      if (bundleRows.length && managementRows.length) {
+        rows = mergeProviderAssetBundleMetadataIntoCatalogRows(
+          mergeCatalogOffersIntoAssetRows(managementRows, offerRows),
+          bundleRows
+        );
       }
+      
       rows = enrichCatalogRowsWithAccessRequests(rows, accessRequests);
 
       const managementResponse = managementResult?.response || {};
       const catalogResponse = offersResult?.response || {};
       const response = {
-        status: (managementResponse?.status >= 200 && managementResponse?.status < 300) || (catalogResponse?.status >= 200 && catalogResponse?.status < 300)
+        status: (managementResponse?.status >= 200 && managementResponse?.status < 300) || (catalogResponse?.status >= 200 && catalogResponse?.status < 300) || (bundleRows.length > 0 ? 200 : 0)
           ? 200
           : (managementResponse?.status || catalogResponse?.status || 0),
         data: managementResponse?.data || catalogResponse?.data || null,

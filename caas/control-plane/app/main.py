@@ -836,6 +836,24 @@ def _policy_access_level(policy: dict) -> str:
     return str(policy.get('dct:accessRights') or policy.get('accessRights') or '').strip()
 
 
+def _combine_visibility(*values) -> str:
+    """Combine visibility levels: if any is private, return private; otherwise public."""
+    normalized = []
+    for value in values:
+        if not value:
+            continue
+        v_str = str(value).strip().lower()
+        if not v_str:
+            continue
+        # Extract last token from URIs like http://purl.org/dc/terms/accessRights
+        token = v_str.split('/')[-1] if '/' in v_str else v_str.split('#')[-1] if '#' in v_str else v_str
+        if token in ('privado', 'private', 'restricted', 'partners', 'internal'):
+            return 'private'
+        elif token in ('publico', 'public'):
+            normalized.append('public')
+    return 'public' if normalized else ''
+
+
 def _public_asset_bundle_metadata(row: dict) -> dict:
     asset_body = row.get('assetBody') if isinstance(row.get('assetBody'), dict) else {}
     props = asset_body.get('properties') or asset_body.get('edc:properties') or {}
@@ -844,13 +862,16 @@ def _public_asset_bundle_metadata(row: dict) -> dict:
     policy_body = row.get('policyBody') if isinstance(row.get('policyBody'), dict) else {}
     policy = policy_body.get('policy') or policy_body.get('edc:policy') or {}
     contract_body = row.get('contractBody') if isinstance(row.get('contractBody'), dict) else {}
-    visibility = (
-        row.get('visibility')
-        or props.get('eitel:visibility')
-        or props.get('dct:accessRights')
-        or _policy_access_level(policy)
-        or (policy.get('dct:accessRights') if isinstance(policy, dict) else '')
+    
+    # Combine visibility from multiple sources: if any is private, result is private
+    visibility = _combine_visibility(
+        row.get('visibility'),
+        props.get('eitel:visibility'),
+        props.get('dct:accessRights'),
+        _policy_access_level(policy),
+        policy.get('dct:accessRights') if isinstance(policy, dict) else ''
     )
+    
     return {
         'assetId': str(row.get('assetId') or asset_body.get('@id') or asset_body.get('id') or '').strip(),
         'assetName': str(row.get('assetName') or props.get('name') or props.get('title') or props.get('dct:title') or '').strip(),
