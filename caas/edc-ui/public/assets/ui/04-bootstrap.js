@@ -110,7 +110,7 @@
       }
       if (document.getElementById('btnArcgisTokenRefresh')) {
         document.getElementById('btnArcgisTokenRefresh').onclick = async () => {
-          const token = await fetchArcgisAccessTokenFromPortalSession();
+          const token = await resolveArcgisTokenForPublish();
           refreshArcgisTokenIndicator();
           if (!token) {
             writeOut({ status: 401, error: 'No se pudo regenerar token ArcGIS. Revisa la sesión del portal.' });
@@ -120,11 +120,11 @@
         };
       }
       if (document.getElementById('btnPublishArcgisLogin')) {
-        document.getElementById('btnPublishArcgisLogin').onclick = () => startArcgisLogin();
+        document.getElementById('btnPublishArcgisLogin').onclick = () => ensureArcgisLogin();
       }
       if (document.getElementById('btnPublishArcgisTokenRefresh')) {
         document.getElementById('btnPublishArcgisTokenRefresh').onclick = async () => {
-          const token = await fetchArcgisAccessTokenFromPortalSession();
+          const token = await resolveArcgisTokenForPublish();
           refreshArcgisTokenIndicator();
           if (!token) {
             writeOut({ status: 401, error: 'No se pudo obtener token ArcGIS para el origen del asset.' });
@@ -134,7 +134,7 @@
         };
       }
       if (document.getElementById('btnStarArcgisLogin')) {
-        document.getElementById('btnStarArcgisLogin').onclick = () => startArcgisLogin();
+        document.getElementById('btnStarArcgisLogin').onclick = () => ensureArcgisLogin();
       }
       if (document.getElementById('btnStarTrustRefresh')) {
         document.getElementById('btnStarTrustRefresh').onclick = async () => {
@@ -202,7 +202,6 @@
       const gaiaxModal = document.getElementById('gaiaxModal');
       if (gaiaxModal) {
         document.getElementById('btnCloseGaiax').onclick = () => gaiaxModal.classList.remove('open');
-        document.getElementById('btnVerifyGaiax').onclick = () => { if (typeof verifyGaiaXCredential === 'function') verifyGaiaXCredential(); };
         gaiaxModal.onclick = (e) => { if (e.target === gaiaxModal) gaiaxModal.classList.remove('open'); };
       }
 

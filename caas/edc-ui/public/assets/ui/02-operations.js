@@ -2366,11 +2366,18 @@ function summarizePolicyTerms(policyObj) {
           : status === 'approved'
             ? `<button class="ghost" style="font-size:12px;padding:3px 10px" onclick="window.revokeAccessRequest('${htmlEscape(req.requestId)}')">Revocar</button>`
           : `<span class="muted" style="font-size:12px">${req.decisionReason ? htmlEscape(req.decisionReason) : '-'}</span>`;
+        const purposeFull = String(req.purpose || '-');
+        const messageFull = String(req.message || '');
+        const purposeShort = purposeFull.length > 80 ? purposeFull.slice(0, 80) + '\u2026' : purposeFull;
+        const needsExpand = purposeFull.length > 80 || messageFull.length > 0;
+        const purposeCell = needsExpand
+          ? `<details style="max-width:220px"><summary style="cursor:pointer;word-break:break-word;list-style:none" title="${htmlEscape(purposeFull)}">${htmlEscape(purposeShort)}</summary><div style="white-space:pre-wrap;word-break:break-word;padding-top:4px;font-size:12px">${htmlEscape(purposeFull)}${messageFull ? `<hr style="margin:6px 0;border:none;border-top:1px solid #e0e0e0"><span class="muted" style="font-size:11px">Mensaje:</span> ${htmlEscape(messageFull)}` : ''}</div></details>`
+          : htmlEscape(purposeFull);
         return `<tr>
           <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${htmlEscape(req.assetId || '')}">${htmlEscape(req.assetTitle || req.assetId || '-')}</td>
           <td>${htmlEscape(req.requesterName || '-')}<br><span class="muted" style="font-size:11px">${htmlEscape(req.requesterEmail || '')}</span></td>
           <td>${htmlEscape(req.requesterOrg || '-')}</td>
-          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${htmlEscape(req.purpose || '')}">${htmlEscape(req.purpose || '-')}</td>
+          <td style="max-width:220px">${purposeCell}</td>
           <td style="white-space:nowrap">${date}</td>
           <td><span style="${statusStyle}">${statusLabel}</span></td>
           <td style="white-space:nowrap">${actions}</td>
@@ -5188,7 +5195,10 @@ function summarizePolicyTerms(policyObj) {
           ...(authType === 'arcgis-login' ? { 'header:Referer': window.location.origin } : {})
         }
       };
-      const publishResp = await callApi('POST', '/v3/assets', JSON.stringify(body));
+      let publishResp = await callApi('POST', '/v3/assets', JSON.stringify(body));
+      if (publishResp.status === 409) {
+        publishResp = await callApi('PUT', `/v3/assets/${encodeURIComponent(id)}`, JSON.stringify(body));
+      }
       if (publishResp.status >= 200 && publishResp.status < 300) {
         upsertAssetBundleBackup({
           assetId: id,
@@ -7650,109 +7660,87 @@ function summarizePolicyTerms(policyObj) {
 
     // ── GAIA-X Identity Modal ─────────────────────────────────────────────────
 
-    function getGaiaXWellKnownUrl(connectorId) {
-      const dspUrl = resolveConfiguredDspUrl(connectorId);
-      if (!dspUrl) return '';
-      const baseUrl = dspUrl.replace(/\/api\/.*$/, '');
-      return baseUrl ? baseUrl + '/.well-known/' : '';
+    function getGaiaXComplianceUrl(connectorId) {
+      const id = String(connectorId || '').toLowerCase();
+      if (id.includes('fuenlabrada') || id.includes('fuenla')) {
+        return 'https://eiteldata.uc3m.es/.well-known/vp-FUENLAcompliance.json';
+      }
+      return 'https://eiteldata.uc3m.es/.well-known/vp-UC3Mcompliance.json';
     }
-
-    let _gaiaxCredential = null;
 
     async function openGaiaXModal(connectorId) {
       const modal = document.getElementById('gaiaxModal');
       const titleEl = document.getElementById('gaiaxModalTitle');
       const didEl = document.getElementById('gaiaxModalDid');
       const bodyEl = document.getElementById('gaiaxModalBody');
-      const resultEl = document.getElementById('gaiaxVerifyResult');
+      const badgeEl = document.getElementById('gaiaxCompliantBadge');
       if (!modal) return;
 
-      _gaiaxCredential = null;
-      titleEl.textContent = `Identidad GAIA-X \u2014 ${prettyConnectorLabel(connectorId)}`;
-      didEl.textContent = 'Cargando\u2026';
-      bodyEl.innerHTML = '<p class="muted" style="padding:8px 0">Obteniendo credenciales\u2026</p>';
-      resultEl.style.display = 'none';
+      titleEl.textContent = `Certificado GAIA-X \u2014 ${prettyConnectorLabel(connectorId)}`;
+      if (didEl) didEl.textContent = 'Cargando\u2026';
+      if (bodyEl) bodyEl.innerHTML = '<p class="muted" style="padding:8px 0">Obteniendo credencial\u2026</p>';
+      if (badgeEl) { badgeEl.textContent = ''; badgeEl.style.display = 'none'; }
       modal.classList.add('open');
 
-      const wellKnownUrl = getGaiaXWellKnownUrl(connectorId);
-      if (!wellKnownUrl) {
-        didEl.textContent = '\u2014';
-        bodyEl.innerHTML = '<p style="color:var(--danger);padding:8px 0">\u26a0 No se encontr\u00f3 URL de well-known para este conector. Comprueba connectorDirectory en config.js.</p>';
-        return;
-      }
-
-      const [didResult, vcResult] = await Promise.allSettled([
-        fetch(wellKnownUrl + 'did.json').then(r => r.ok ? r.json() : Promise.reject(r.status)),
-        fetch(wellKnownUrl + 'participant.json').then(r => r.ok ? r.json() : Promise.reject(r.status)),
-      ]);
-
-      const didDoc = didResult.status === 'fulfilled' ? didResult.value : null;
-      const participantVc = vcResult.status === 'fulfilled' ? vcResult.value : null;
-      _gaiaxCredential = participantVc || didDoc;
-
-      didEl.textContent = didDoc?.id || '\u2014';
-
-      let html = '';
-      html += '<div class="gaiax-section">';
-      html += `<div class="gaiax-section-label">DID Document <span class="gaiax-url">${htmlEscape(wellKnownUrl + 'did.json')}</span></div>`;
-      html += didDoc
-        ? `<pre class="gaiax-pre">${htmlEscape(JSON.stringify(didDoc, null, 2))}</pre>`
-        : `<p class="gaiax-placeholder">\u26a0 No encontrado (${htmlEscape(String(didResult.reason ?? 'error'))})</p>`;
-      html += '</div>';
-      html += '<div class="gaiax-section">';
-      html += `<div class="gaiax-section-label">Credencial del Participante <span class="gaiax-url">${htmlEscape(wellKnownUrl + 'participant.json')}</span></div>`;
-      html += participantVc
-        ? `<pre class="gaiax-pre">${htmlEscape(JSON.stringify(participantVc, null, 2))}</pre>`
-        : `<p class="gaiax-placeholder">\u26a0 No encontrado (${htmlEscape(String(vcResult.reason ?? 'error'))})</p>`;
-      html += '</div>';
-
-      bodyEl.innerHTML = html;
-    }
-
-    async function verifyGaiaXCredential() {
-      const resultEl = document.getElementById('gaiaxVerifyResult');
-      if (!resultEl) return;
-
-      const complianceUrl = String(window.EITEL_UI_CONFIG?.gaiaXComplianceUrl || '').trim();
-      if (!complianceUrl) {
-        resultEl.className = 'gaiax-verify-warn';
-        resultEl.textContent = '\u26a0 gaiaXComplianceUrl no configurado en config.js';
-        resultEl.style.display = 'inline';
-        return;
-      }
-      if (!_gaiaxCredential) {
-        resultEl.className = 'gaiax-verify-warn';
-        resultEl.textContent = '\u26a0 Sin credencial disponible para verificar';
-        resultEl.style.display = 'inline';
-        return;
-      }
-
-      resultEl.className = '';
-      resultEl.textContent = 'Verificando\u2026';
-      resultEl.style.display = 'inline';
-
+      const credUrl = getGaiaXComplianceUrl(connectorId);
+      let vpData = null;
       try {
-        const resp = await fetch(complianceUrl, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(_gaiaxCredential),
-        });
-        const text = await resp.text();
-        let parsed;
-        try { parsed = JSON.parse(text); } catch { parsed = text; }
-        if (resp.ok) {
-          resultEl.className = 'gaiax-verify-ok';
-          resultEl.textContent = '\u2705 ' + resp.status + ': ' + (typeof parsed === 'string' ? parsed : JSON.stringify(parsed));
-        } else {
-          resultEl.className = 'gaiax-verify-err';
-          resultEl.textContent = '\u2717 Error ' + resp.status + ': ' + (typeof parsed === 'string' ? parsed : JSON.stringify(parsed));
-        }
+        const res = await fetch(credUrl);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        vpData = await res.json();
       } catch (err) {
-        resultEl.className = 'gaiax-verify-err';
-        resultEl.textContent = '\u2717 Error de red: ' + String(err);
+        if (didEl) didEl.textContent = '\u2014';
+        if (bodyEl) bodyEl.innerHTML = `<p style="color:var(--danger);padding:8px 0">\u26a0 Error al cargar credencial: ${htmlEscape(String(err))}</p>`;
+        return;
       }
+
+      // Extract participant data (first VC with gx:LegalParticipant)
+      const vcs = Array.isArray(vpData?.verifiableCredential) ? vpData.verifiableCredential : [];
+      const participantVc = vcs.find(vc => {
+        const subj = vc?.credentialSubject;
+        return subj && (subj.type === 'gx:LegalParticipant' || subj['gx:legalName']);
+      });
+      const subject = participantVc?.credentialSubject || {};
+      const legalName = String(subject['gx:legalName'] || subject.id || '\u2014');
+      const connectorIds = Array.isArray(subject['conector:id'])
+        ? subject['conector:id']
+        : (subject['conector:id'] ? [subject['conector:id']] : []);
+
+      // Extract the compliance VC (issued by compliance.lab.gaia-x.eu)
+      const complianceVc = vcs.find(vc => String(vc?.issuer || '').includes('compliance.lab.gaia-x.eu'));
+
+      if (didEl) didEl.textContent = legalName;
+
+      // Auto-verify: does the current page URL start with one of the declared connector URLs?
+      const currentUrl = window.location.href;
+      const isCompliant = connectorIds.length > 0 && connectorIds.some(u => currentUrl.startsWith(String(u)));
+
+      if (badgeEl) {
+        badgeEl.style.display = 'block';
+        if (isCompliant) {
+          badgeEl.className = 'gaiax-verify-ok';
+          badgeEl.textContent = '\u2705 GAIA-X Compliant Verificado';
+        } else if (connectorIds.length > 0) {
+          badgeEl.className = 'gaiax-verify-warn';
+          badgeEl.textContent = '\u2139\ufe0f Conectores declarados: ' + connectorIds.join(', ');
+        } else {
+          badgeEl.className = 'gaiax-verify-warn';
+          badgeEl.textContent = '\u26a0 No se encontr\u00f3 conector:id en la credencial';
+        }
+      }
+
+      // Show compliance VC as raw JSON
+      let html = '';
+      if (complianceVc) {
+        html += '<div class="gaiax-section">';
+        html += `<div class="gaiax-section-label">Credencial de Cumplimiento GAIA-X <span class="gaiax-url">${htmlEscape(credUrl)}</span></div>`;
+        html += `<pre class="gaiax-pre">${htmlEscape(JSON.stringify(complianceVc, null, 2))}</pre>`;
+        html += '</div>';
+      } else {
+        html = `<p class="gaiax-placeholder">\u26a0 No se encontr\u00f3 credencial de cumplimiento en la respuesta.</p>`;
+      }
+      if (bodyEl) bodyEl.innerHTML = html;
     }
 
     window.openGaiaXModal = openGaiaXModal;
-    window.verifyGaiaXCredential = verifyGaiaXCredential;
 
