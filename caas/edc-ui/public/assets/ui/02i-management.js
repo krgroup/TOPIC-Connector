@@ -337,7 +337,7 @@
           writeOut({ status: 400, error: 'Introduce la URL del FeatureLayer ArcGIS.' });
           return { status: 400 };
         }
-        baseUrl = arcgisLayerUrl.replace(/\/+$/, '').replace(/\/query\??.*$/i, '');
+        baseUrl = normalizeArcgisFeatureLayerBaseUrl(arcgisLayerUrl);
         path = `/query?where=1=1&outFields=*&f=${encodeURIComponent(arcgisExportFmt)}`;
         contentType = arcgisExportFmt === 'csv' ? 'text/csv' : (arcgisExportFmt === 'kml' ? 'application/vnd.google-earth.kml+xml' : 'application/json');
       }

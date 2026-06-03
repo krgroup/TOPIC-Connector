@@ -94,7 +94,8 @@
           return { status: 401, error: 'No se pudo obtener token ArcGIS para exportar el FeatureLayer.' };
         }
         const tokenPart = token ? `&token=${encodeURIComponent(token)}` : '';
-        const exportUrl = `${baseUrl.replace(/\/+$/, '')}/query?where=1=1&outFields=*&f=${encodeURIComponent(exportFormat)}${tokenPart}`;
+        const layerBaseUrl = normalizeArcgisFeatureLayerBaseUrl(baseUrl);
+        const exportUrl = `${layerBaseUrl.replace(/\/+$/, '')}/query?where=1=1&outFields=*&f=${encodeURIComponent(exportFormat)}${tokenPart}`;
         try {
           const response = await fetch(exportUrl, { method: 'GET', credentials: 'include' });
           if (!response.ok) return { status: response.status, error: 'No se pudo exportar el FeatureLayer ArcGIS.' };

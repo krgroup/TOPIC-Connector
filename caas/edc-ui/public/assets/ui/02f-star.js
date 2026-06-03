@@ -714,6 +714,27 @@
       return query ? `${rawPath}?${query}` : rawPath;
     }
 
+    function normalizeArcgisFeatureLayerBaseUrl(rawUrl) {
+      let baseUrl = String(rawUrl || '').trim();
+      if (!baseUrl) return '';
+
+      baseUrl = baseUrl.replace(/\/query(?:\?.*)?$/i, '');
+      try {
+        const url = new URL(baseUrl);
+        url.hash = '';
+        url.search = '';
+        baseUrl = `${url.origin}${url.pathname}`;
+      } catch {
+        baseUrl = baseUrl.replace(/[?#].*$/, '');
+      }
+
+      baseUrl = baseUrl.replace(/\/+$/, '').replace(/\/query$/i, '');
+      if (/\/(?:FeatureServer|MapServer)$/i.test(baseUrl)) {
+        baseUrl = `${baseUrl}/0`;
+      }
+      return baseUrl;
+    }
+
     function normalizeHttpDataUrlParts(rawBaseUrl, rawPath) {
       let baseUrl = String(rawBaseUrl || '').trim();
       let path = String(rawPath || '').trim();
