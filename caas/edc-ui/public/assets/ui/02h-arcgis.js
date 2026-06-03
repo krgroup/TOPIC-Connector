@@ -331,6 +331,20 @@
       if (!token) return { status: 401, error: 'No se pudo obtener token ArcGIS para subida.' };
 
       let blobResult = await fetchAssetBlobForArcgisUpload(contractId, assetId);
+      if (!(blobResult.status >= 200 && blobResult.status < 300) && assetId && transferParty?.counterPartyId) {
+        const providerConnectorId = extractConnectorIdHint(transferParty.counterPartyId) || transferParty.counterPartyId;
+        const providerAssetResp = await callConnectorManagementApi(
+          providerConnectorId, 'GET', `/v3/assets/${encodeURIComponent(assetId)}`, undefined,
+          { timeoutMs: 5000, silent: true }
+        ).catch(() => null);
+        if (providerAssetResp?.status >= 200 && providerAssetResp?.status < 300) {
+          const providerAsset = providerAssetResp.data || {};
+          const providerProps = providerAsset.properties || providerAsset['edc:properties'] || {};
+          if (String(providerProps['eitel:sourceMode'] || '').trim() === 'arcgis-feature-layer') {
+            blobResult = await fetchArcgisFeatureLayerBlob(contractId, assetId, providerAsset);
+          }
+        }
+      }
       if (!(blobResult.status >= 200 && blobResult.status < 300)) {
         blobResult = await fetchRemoteBlobViaTransferSink(contractId, assetId, transferParty);
       }
@@ -369,16 +383,29 @@
       const sendAddItem = async (itemType) => {
         const endpoint = `${arcgis.portalUrl}/sharing/rest/content/users/${encodeURIComponent(authState.username)}/addItem`;
         const response = await fetch(endpoint, { method: 'POST', body: buildForm(itemType), credentials: 'include' });
-        const data = await response.json();
+        const text = await response.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : {};
+        } catch {
+          data = {
+            error: {
+              message: 'ArcGIS devolvió una respuesta no JSON al crear el item.',
+              preview: text.slice(0, 500),
+            },
+          };
+        }
         return { endpoint, response, data, itemType };
       };
 
       try {
-        let result = await sendAddItem(autoMode ? '' : resolvedType);
+        let result = await sendAddItem(resolvedType);
         if (!result.response.ok || result.data?.error || result.data?.success === false) {
-          const shouldRetryWithFile = autoMode
-            ? (isArcgisTypeRequiredError(result.data) || isArcgisGeoJsonAnalysisError(result.data))
-            : (isArcgisUnknownTypeError(result.data) || isArcgisGeoJsonAnalysisError(result.data));
+          const shouldRetryWithFile = (
+            isArcgisUnknownTypeError(result.data) ||
+            isArcgisGeoJsonAnalysisError(result.data) ||
+            (autoMode && isArcgisTypeRequiredError(result.data))
+          );
           if (shouldRetryWithFile && result.itemType !== 'File') {
             result = await sendAddItem('File');
           }

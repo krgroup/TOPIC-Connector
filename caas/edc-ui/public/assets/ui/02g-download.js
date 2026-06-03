@@ -29,7 +29,7 @@
       return `${safeAssetId}.${guessFileExtension(contentType)}`;
     }
 
-    async function downloadArcgisFeatureLayerAsset(contractId, assetId, asset) {
+    async function fetchArcgisFeatureLayerBlob(contractId, assetId, asset) {
       const props = asset?.properties || asset?.['edc:properties'] || {};
       const dataAddress = asset?.dataAddress || asset?.['edc:dataAddress'] || {};
       const baseUrl = normalizeArcgisFeatureLayerBaseUrl(dataAddress.baseUrl || dataAddress['edc:baseUrl'] || '');
@@ -82,16 +82,12 @@
         const contentType = getArcgisExportContentType(exportFormat);
         const blob = new Blob([text], { type: contentType });
         const filename = inferArcgisExportFilename(assetId, exportFormat);
-        const objectUrl = URL.createObjectURL(blob);
-        triggerBrowserDownload(objectUrl, filename);
-        setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
-
         return {
           status: 200,
-          downloaded: true,
           contractId,
           assetId,
           sourceUrl,
+          blob,
           filename,
           contentType,
           bytes: blob.size,
@@ -107,6 +103,21 @@
           detail: String(error),
         };
       }
+    }
+
+    async function downloadArcgisFeatureLayerAsset(contractId, assetId, asset) {
+      const blobResult = await fetchArcgisFeatureLayerBlob(contractId, assetId, asset);
+      if (!(blobResult.status >= 200 && blobResult.status < 300)) return blobResult;
+
+      const objectUrl = URL.createObjectURL(blobResult.blob);
+      triggerBrowserDownload(objectUrl, blobResult.filename);
+      setTimeout(() => URL.revokeObjectURL(objectUrl), 5000);
+
+      return {
+        ...blobResult,
+        downloaded: true,
+        blob: undefined,
+      };
     }
 
     /**
