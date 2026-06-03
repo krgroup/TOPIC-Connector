@@ -1,4 +1,4 @@
-﻿    function parseJsonSafe(text, fallback = null) {
+    function parseJsonSafe(text, fallback = null) {
       try { return JSON.parse(text); } catch { return fallback; }
     }
 
@@ -351,8 +351,9 @@
           token: authToken
         };
         if (sourceMode === 'arcgis-feature-layer') {
-          // preserve the f= format param already set in path; only add token
-          path = setQueryParams(path, { token: authToken });
+          // Do NOT use setQueryParams here — URLSearchParams.toString() encodes '='
+          // in values (e.g. where=1=1 → where=1%3D1), which ArcGIS rejects.
+          path = `${path}&token=${encodeURIComponent(authToken)}`;
         } else {
           path = buildArcgisPathWithToken(path, authToken);
         }

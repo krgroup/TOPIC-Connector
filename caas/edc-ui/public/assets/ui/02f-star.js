@@ -1,4 +1,4 @@
-﻿    const starTrustEnabled = ['1', 'true', 'yes', 'on'].includes(String(cfg.starMode || (String(connectorName || '').toLowerCase().includes('star') ? 'true' : '')).toLowerCase());
+    const starTrustEnabled = ['1', 'true', 'yes', 'on'].includes(String(cfg.starMode || (String(connectorName || '').toLowerCase().includes('star') ? 'true' : '')).toLowerCase());
     const starTrustConfig = {
       enabled: starTrustEnabled,
       coordinatorName: String(cfg.starCoordinatorName || 'UC3M Coordinador EITEL').trim(),

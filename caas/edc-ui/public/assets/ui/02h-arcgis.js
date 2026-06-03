@@ -1,4 +1,4 @@
-﻿    function buildArcgisMetadataEnvelope({
+    function buildArcgisMetadataEnvelope({
       manualTitle,
       manualTags,
       manualDescription,

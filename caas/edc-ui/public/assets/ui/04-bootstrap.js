@@ -1,4 +1,4 @@
-﻿function openSettings() { settingsModal.classList.add('open'); }
+function openSettings() { settingsModal.classList.add('open'); }
     function closeSettings() { settingsModal.classList.remove('open'); }
 
     function applyProjectVariantUi() {
