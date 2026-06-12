@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.0.1 - 2026-06-12
+
+SoftwareX repository packaging release.
+
+### Added
+
+- SoftwareX-oriented README.
+- Citation metadata.
+- NOTICE, SECURITY, CONTRIBUTING, and reproducibility documentation.
+- Validation scripts and sample data.
+- CI workflow for Docker Compose and frontend syntax checks.
+
 ## v1.0.0 - 2026-06-12
 
 Initial SoftwareX-oriented release.
