@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.3 - 2026-06-12
+
+SoftwareX alignment release.
+
+### Changed
+
+- Shortened the manuscript related-work and workflow sections to better match the validation evidence.
+- Expanded the manuscript software metadata table with SoftwareX-oriented fields.
+- Removed pending DOI wording from the manuscript and README.
+- Added release notes for publishing the visible GitHub release.
+
 ## v1.0.2 - 2026-06-12
 
 SoftwareX hardening release.

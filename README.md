@@ -13,7 +13,7 @@ This repository contains the software artifact described in:
 Recommended artifact version:
 
 - Repository: https://github.com/krgroup/TOPIC-Connector
-- Release: `v1.0.2`
+- Release: `v1.0.3`
 - License: Apache-2.0
 - Support contact: Mario Garcia Rodriguez, Universidad Carlos III de Madrid
 
@@ -160,7 +160,7 @@ Notes:
 
 ## Citation
 
-If you use TOPIC Connector, cite the release metadata in [CITATION.cff](CITATION.cff). For journal submission, mint the Zenodo archive from the same GitHub release tag and add the DOI to this section before submission.
+If you use TOPIC Connector, cite the release metadata in [CITATION.cff](CITATION.cff).
 
 ## License
 
