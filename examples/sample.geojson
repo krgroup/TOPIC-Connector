@@ -1,0 +1,16 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Sample municipal point",
+        "category": "demo"
+      },
+      "geometry": {
+        "type": "Point",
+        "coordinates": [-3.7038, 40.4168]
+      }
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+title: "TOPIC Connector"
+message: "If you use this software, please cite it using the metadata below."
+type: software
+authors:
+  - family-names: "Garcia Rodriguez"
+    given-names: "Mario"
+repository-code: "https://github.com/krgroup/TOPIC-Connector"
+version: "1.0.0"
+date-released: "2026-06-12"
+license: "Apache-2.0"
+abstract: "TOPIC Connector is a municipal-oriented toolkit for deploying and operating Eclipse EDC-based data connectors with a management UI, local asset ingestion, download capture, gateway routing, and ArcGIS-oriented workflows."

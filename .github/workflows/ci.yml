@@ -1,0 +1,26 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Docker Compose files
+        run: |
+          docker compose --env-file .env.example -f docker-compose.yaml config
+          docker compose --env-file .env.production.example -f docker-compose.production.yaml config
+          docker compose --env-file .env.production.example -f docker-compose.fuenlabrada.production.yaml config
+          docker compose --env-file connectors/normal/.env.example -f connectors/normal/docker-compose.yaml config
+          docker compose --env-file connectors/star/.env.example -f connectors/star/docker-compose.yaml config
+
+      - name: Check frontend JavaScript syntax
+        run: |
+          node --check caas/edc-ui/public/assets/ui/02f-star.js
+          node --check caas/edc-ui/public/assets/ui/02g-download.js
+          node --check caas/edc-ui/public/assets/ui/02h-arcgis.js
+          node --check caas/edc-ui/public/assets/ui/02i-management.js

@@ -1,160 +1,167 @@
-# EITELConnector
+# TOPIC Connector
 
-Repositorio principal del ecosistema EITEL para desplegar y operar conectores basados en Eclipse EDC, junto con la UI de administración, servicios auxiliares y plantillas de despliegue.
+TOPIC Connector is a municipal-oriented toolkit for deploying and operating Eclipse Dataspace Components (EDC)-based data connectors. It packages a connector runtime, operator UI, local asset ingestion service, download-capture service, PostgreSQL persistence, and Nginx gateway profiles into reproducible deployment artifacts.
 
-## Qué contiene
+The repository was originally developed under the EITELConnector name. EITEL refers to the broader research and engineering ecosystem; TOPIC Connector is the bounded software artifact released for review, citation, and reuse.
 
-- Runtime EDC empaquetado para despliegue con Docker.
-- UI web EITEL para gestión de assets, policies, contracts y transfers.
-- Servicio `local-assets` para subida y publicación de ficheros locales.
-- Servicio `download-sink` para recepcionar descargas y transferencias.
-- Control plane `CAAS` para escenarios de Connector-as-a-Service.
-- Despliegues productivos existentes para `uc3m` y `fuenlabrada`.
-- Estructura separada para conectores `normal` y `star` en `connectors/`.
+## SoftwareX Artifact
 
-## Estado actual de despliegues
+This repository contains the software artifact described in:
 
-Los despliegues productivos actuales del proyecto son:
+> TOPIC Connector: A Toolkit for Engineering and Operating Municipal Data Connectors
 
-- `uc3m`: [docker-compose.production.yaml](docker-compose.production.yaml)
-- `fuenlabrada`: [docker-compose.fuenlabrada.production.yaml](docker-compose.fuenlabrada.production.yaml)
+Recommended artifact version:
 
-Sus configuraciones nginx y scripts de inicialización siguen en:
+- Repository: https://github.com/krgroup/TOPIC-Connector
+- Release: `v1.0.0`
+- License: Apache-2.0
+- Support contact: Mario Garcia Rodriguez, Universidad Carlos III de Madrid
 
-- [traefik/nginx-uc3m.conf](traefik/nginx-uc3m.conf)
-- [traefik/nginx-fuenlabrada.conf](traefik/nginx-fuenlabrada.conf)
-- [deploy/aws/init-conectoruc3m.sql](deploy/aws/init-conectoruc3m.sql)
-- [deploy/aws/init-conectorfuenlabrada.sql](deploy/aws/init-conectorfuenlabrada.sql)
+The recommended reproduction path for reviewers is the local Docker Compose stack in [docker-compose.yaml](docker-compose.yaml). Production profiles and experimental profiles are kept for traceability, but they are not the primary SoftwareX reproduction path.
 
-Además, existe una estructura adicional en [connectors](connectors) para despliegues separados de nuevos conectores:
+## Core Components
 
-- `normal`: sin ArcGIS
-- `star`: con ArcGIS
-- `dual`: ambos a la vez
+| Component | Technology | Purpose |
+| --- | --- | --- |
+| EDC runtime | Java / Eclipse EDC | Connector core for assets, policies, contracts, negotiations, and transfers |
+| Management UI | HTML / CSS / JavaScript, served by Nginx | Operator interface for publication, catalog, contracts, transfers, and ArcGIS-oriented workflows |
+| local-assets | Python / FastAPI | Local file upload and controlled publication support |
+| download-sink | Python / FastAPI | Transfer/download capture and traceable record listing |
+| PostgreSQL | PostgreSQL | Runtime persistence for connector state |
+| Gateway | Nginx | Stable public routing for UI, management, DSP, local-assets, and download-sink endpoints |
 
-Esta estructura no sustituye por sí sola a `uc3m` ni a `fuenlabrada`.
+## Repository Structure
 
-## Estructura principal
+| Path | Role | Stability |
+| --- | --- | --- |
+| [docker-compose.yaml](docker-compose.yaml) | Local reproduction stack | Supported SoftwareX path |
+| [caas/edc-ui](caas/edc-ui) | Management UI | Supported |
+| [caas/control-plane](caas/control-plane) | local-assets API and publication support | Supported |
+| [caas/download-sink](caas/download-sink) | Transfer/download capture service | Supported |
+| [deploy](deploy) | EDC runtime Dockerfile and deployment notes | Supported |
+| [traefik](traefik) | Nginx gateway configuration | Supported, legacy directory name |
+| [connectors/normal](connectors/normal) | Standalone connector profile without ArcGIS | Supported example |
+| [connectors/star](connectors/star) | ArcGIS/trust-oriented connector profile | Experimental |
+| [connectors/dual](connectors/dual) | Two-profile local PoC | Experimental |
+| [connectors/star-pair](connectors/star-pair) | Two STAR connector PoC | Experimental |
+| [connectors/star-lan](connectors/star-lan) | LAN-oriented STAR PoC | Experimental |
+| [docker-compose.production.yaml](docker-compose.production.yaml) | UC3M production-like profile | Institutional profile, not SoftwareX baseline |
+| [docker-compose.fuenlabrada.production.yaml](docker-compose.fuenlabrada.production.yaml) | Fuenlabrada production-like profile | Institutional profile, not SoftwareX baseline |
+| [docker-compose-backup.yaml](docker-compose-backup.yaml) | Legacy backup profile | Deprecated |
+| [paper](paper) | Manuscript sources | Documentation |
 
-- [caas](caas): control plane, generación de planes y utilidades CAAS.
-- [caas/control-plane](caas/control-plane): API FastAPI para `local-assets` y utilidades de publicación.
-- [caas/download-sink](caas/download-sink): servicio receptor de descargas.
-- [caas/edc-ui](caas/edc-ui): frontend EITEL servido con nginx.
-- [deploy](deploy): Dockerfile del runtime y documentación de despliegue.
-- [deploy/aws](deploy/aws): scripts SQL y guías de despliegue en AWS.
-- [traefik](traefik): configuraciones nginx/gateway para los conectores.
-- [connectors](connectors): despliegues separados `normal` y `star`.
+## Requirements
 
-## Requisitos
-
+- Git
 - Docker Engine
 - Docker Compose plugin
-- Git
+- curl, for validation scripts
 
-Para desarrollo local también puede ser útil:
+Optional for development:
 
 - Python 3.11+
-- entorno virtual local `.venv`
+- Node.js, for frontend syntax checks
 
-## Arranque rápido local
+## Quick Start
 
-Para levantar el stack local base del conector UC3M:
+Clone and start the local SoftwareX reproduction stack:
 
 ```powershell
-docker compose -f docker-compose.yaml up -d --build
+git clone https://github.com/krgroup/TOPIC-Connector.git
+cd TOPIC-Connector
+Copy-Item .env.example .env
+docker compose --env-file .env -f docker-compose.yaml up -d --build
 ```
 
-Este compose es útil para pruebas locales y usa:
+On Linux or macOS:
 
-- runtime EDC
-- PostgreSQL
-- UI EITEL
-- `local-assets`
-- gateway nginx
+```bash
+git clone https://github.com/krgroup/TOPIC-Connector.git
+cd TOPIC-Connector
+cp .env.example .env
+docker compose --env-file .env -f docker-compose.yaml up -d --build
+```
 
-## Despliegue en producción
+Open the UI through the configured gateway, typically:
 
-### UC3M
+```text
+http://localhost:12000/
+```
+
+## Reproducibility
+
+The reproducibility guide is available in [docs/REPRODUCIBILITY.md](docs/REPRODUCIBILITY.md).
+
+Validation scripts:
+
+```bash
+./scripts/validate_stack.sh
+./scripts/validate_local_asset_upload.sh
+./scripts/validate_download_capture.sh
+```
+
+Expected checks include:
+
+- gateway reachable;
+- EDC runtime health endpoint reachable from the Docker network;
+- local-assets service reachable;
+- local file upload accepted;
+- download-sink ingestion accepted and listed.
+
+## Deployment Profiles
+
+| Deployment | Purpose | Use for SoftwareX? |
+| --- | --- | --- |
+| `docker-compose.yaml` | Local UC3M-style reproduction stack | Yes |
+| `connectors/normal/docker-compose.yaml` | Minimal standalone connector | Optional example |
+| `connectors/star/docker-compose.yaml` | ArcGIS/trust-oriented profile | No, experimental |
+| `connectors/dual/docker-compose.yaml` | Local two-profile PoC | No, experimental |
+| `docker-compose.production.yaml` | UC3M production-like deployment | No, institutional |
+| `docker-compose.fuenlabrada.production.yaml` | Fuenlabrada production-like deployment | No, institutional |
+| `docker-compose-backup.yaml` | Legacy backup profile | No, deprecated |
+
+## Configuration And Secrets
+
+Use example files as templates:
+
+- [.env.example](.env.example): local SoftwareX reproduction profile;
+- [.env.production.example](.env.production.example): production-like institutional profile;
+- [connectors/normal/.env.example](connectors/normal/.env.example);
+- [connectors/star/.env.example](connectors/star/.env.example);
+- [connectors/dual/.env.example](connectors/dual/.env.example).
+
+Never commit real `.env` files, credentials, database dumps, generated local assets, or private Gaia-X credentials.
+
+### Security Note About Frontend Demo Keys
+
+Some local and historical profiles expose management or local-assets tokens to the browser through `NEXT_PUBLIC_*` variables. This is acceptable only for local demonstration profiles. Production deployments should place privileged EDC Management API access behind an authenticated backend or gateway layer; browser clients should not receive privileged management credentials.
+
+## Production-Like Institutional Profiles
+
+UC3M:
 
 ```powershell
 Copy-Item .env.production.example .env.production
 docker compose --env-file .env.production -f docker-compose.production.yaml up -d --build
 ```
 
-Documentación relacionada:
-
-- [deploy/aws/PRODUCTION_DEPLOY.md](deploy/aws/PRODUCTION_DEPLOY.md)
-- [deploy/aws/PRODUCTION_DEPLOY_WINDOWS.md](deploy/aws/PRODUCTION_DEPLOY_WINDOWS.md)
-
-### Fuenlabrada
+Fuenlabrada:
 
 ```powershell
 Copy-Item .env.production.example .env.production
 docker compose --env-file .env.production -f docker-compose.fuenlabrada.production.yaml up -d --build
 ```
 
-Importante:
+Notes:
 
-- si cambian variables ArcGIS de la UI, conviene recrear el contenedor UI
-- no ejecutar `docker compose down -v` en producción
-- no borrar los volúmenes PostgreSQL asociados si se quiere preservar estado
+- both profiles publish `12000:80`, so they should not be started together on the same host without port changes;
+- do not run `docker compose down -v` against production data unless the persistent state is intentionally being deleted;
+- if ArcGIS UI variables change, recreate the UI container so `config.js` is regenerated.
 
-## Conectores separados `normal` y `star`
+## Citation
 
-La estructura separada vive en [connectors](connectors) y está pensada para nuevos despliegues independientes.
+If you use TOPIC Connector, cite the release metadata in [CITATION.cff](CITATION.cff). A Zenodo DOI should be added to this section once the release archive is minted.
 
-Ejemplos:
+## License
 
-```powershell
-Copy-Item connectors/normal/.env.example connectors/normal/.env
-docker compose --env-file connectors/normal/.env -f connectors/normal/docker-compose.yaml up -d --build
-```
-
-```powershell
-Copy-Item connectors/star/.env.example connectors/star/.env
-docker compose --env-file connectors/star/.env -f connectors/star/docker-compose.yaml up -d --build
-```
-
-```powershell
-Copy-Item connectors/dual/.env.example connectors/dual/.env
-docker compose --env-file connectors/dual/.env -f connectors/dual/docker-compose.yaml up -d --build
-```
-
-Más detalle en [connectors/shared/README.md](connectors/shared/README.md).
-
-## CAAS
-
-El módulo CAAS permite gestionar planes y generación de despliegues para conectores tipo servicio.
-
-Más información en [caas/README.md](caas/README.md).
-
-## Gestión de configuración y secretos
-
-- Los valores reales de secretos no deben guardarse en el repositorio.
-- Usa siempre archivos ejemplo como base:
-  - [.env.production.example](.env.production.example)
-  - [connectors/normal/.env.example](connectors/normal/.env.example)
-  - [connectors/star/.env.example](connectors/star/.env.example)
-  - [connectors/dual/.env.example](connectors/dual/.env.example)
-- Sustituye placeholders antes de desplegar.
-
-## Persistencia y datos sensibles
-
-Los datos persistentes del conector pueden incluir:
-
-- contratos
-- negociaciones
-- transferencias
-- assets locales subidos
-
-Por eso:
-
-- no borres volúmenes de producción sin intención explícita
-- no publiques `.env` reales
-- no subas bases de datos locales ni ficheros generados en pruebas
-
-## Notas útiles
-
-- `uc3m` y `fuenlabrada` están pensados para despliegues separados.
-- Ambos compose productivos publican `12000:80`, por lo que no deben levantarse juntos en la misma máquina salvo adaptación previa.
-- La UI EITEL toma parte de su configuración en tiempo de arranque desde variables de entorno.
+TOPIC Connector is licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

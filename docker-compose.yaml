@@ -4,7 +4,7 @@ services:
     container_name: conectoruc3m-postgres
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: change-me
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
     command: >
       sh -c "echo 'CREATE DATABASE conectoruc3m_db;' > /docker-entrypoint-initdb.d/init.sql && docker-entrypoint.sh postgres"
     healthcheck:
@@ -39,8 +39,8 @@ services:
       EDC_TRANSFER_PROXY_TOKEN_VERIFIER_PUBLICKEY_ALIAS: public-key
       EDC_JDBC_URL: jdbc:postgresql://edc-postgres:5432/conectoruc3m_db
       EDC_JDBC_USER: postgres
-      EDC_JDBC_PASSWORD: change-me
-      EDC_API_AUTH_KEY: change-me
+      EDC_JDBC_PASSWORD: ${POSTGRES_PASSWORD:-change-me}
+      EDC_API_AUTH_KEY: ${EDC_API_AUTH_KEY:-change-me}
       EDC_WEB_HTTP_MANAGEMENT_AUTH_DAC_AUDIENCE: conectoruc3m
       EDC_WEB_REST_CORS_ENABLED: "true"
       EDC_WEB_REST_CORS_HEADERS: "origin,content-type,accept,x-api-key,authorization"
@@ -64,14 +64,17 @@ services:
         condition: service_healthy
     environment:
       NEXT_PUBLIC_MANAGEMENT_API_URL: /conectoruc3m/api/management
-      NEXT_PUBLIC_MANAGEMENT_API_AUTH_KEY: change-me
-      NEXT_PUBLIC_LOCAL_ASSETS_AUTH_TOKEN: change-me
+      # DEMO ONLY: browser-visible credentials are acceptable only for the local reproduction profile.
+      NEXT_PUBLIC_MANAGEMENT_API_AUTH_KEY: ${EDC_API_AUTH_KEY:-change-me}
+      NEXT_PUBLIC_LOCAL_ASSETS_AUTH_TOKEN: ${LOCAL_ASSETS_AUTH_TOKEN:-change-me}
       NEXT_PUBLIC_CONNECTOR_NAME: conectoruc3m
       NEXT_PUBLIC_DSP_URL: http://conectoruc3m:11003/api/v1/dsp/2025-1
     volumes:
       - ./caas/edc-ui/public/index.final.html:/usr/share/nginx/html/index.final.html:ro
       - ./caas/edc-ui/public/index.final.html:/usr/share/nginx/html/index.html:ro
       - ./caas/edc-ui/public/config.template.js:/usr/share/nginx/html/config.template.js:ro
+      - ./caas/edc-ui/public/auth-hotfix.js:/usr/share/nginx/html/auth-hotfix.js:ro
+      - ./caas/edc-ui/public/assets:/usr/share/nginx/html/assets:ro
     networks:
       - edc-net
 
@@ -83,7 +86,7 @@ services:
     environment:
       CAAS_LOCAL_ASSETS_INTERNAL_BASE_URL: http://conectoruc3m-local-assets:8081/v1/local-assets/files
       CAAS_LOCAL_ASSETS_PUBLIC_BASE_URL: http://localhost:12000/conectoruc3m/local-assets/files
-      CAAS_LOCAL_ASSETS_AUTH_TOKEN: change-me
+      CAAS_LOCAL_ASSETS_AUTH_TOKEN: ${LOCAL_ASSETS_AUTH_TOKEN:-change-me}
     volumes:
       - local_assets_data:/app/data/local-assets
     networks:
@@ -95,7 +98,7 @@ services:
       dockerfile: Dockerfile
     container_name: conectoruc3m-download-sink
     environment:
-      DOWNLOAD_SINK_AUTH_TOKEN: change-me
+      DOWNLOAD_SINK_AUTH_TOKEN: ${LOCAL_ASSETS_AUTH_TOKEN:-change-me}
     volumes:
       - download_sink_data:/app/data
     networks:
