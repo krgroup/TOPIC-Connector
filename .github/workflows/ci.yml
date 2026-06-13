@@ -31,11 +31,19 @@ jobs:
           cp .env.example .env
           docker compose --env-file .env -f docker-compose.yaml up -d --build
 
-      - name: Run functional smoke checks
+      - name: Validate stack health
         run: |
-          chmod +x scripts/validate_stack.sh scripts/validate_local_asset_upload.sh scripts/validate_download_capture.sh
+          chmod +x scripts/validate_stack.sh
           ./scripts/validate_stack.sh
+
+      - name: Validate local asset upload
+        run: |
+          chmod +x scripts/validate_local_asset_upload.sh
           ./scripts/validate_local_asset_upload.sh
+
+      - name: Validate download capture
+        run: |
+          chmod +x scripts/validate_download_capture.sh
           ./scripts/validate_download_capture.sh
 
       - name: Show compose logs on failure

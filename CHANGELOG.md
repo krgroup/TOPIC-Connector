@@ -1,5 +1,15 @@
 # Changelog
 
+## v1.0.9 - 2026-06-13
+
+CI readiness release.
+
+### Changed
+
+- Adds health checks for the local-assets and download-sink services in the primary Docker Compose stack.
+- Splits functional smoke checks into separate GitHub Actions steps.
+- Adds retry logic to smoke-test scripts to tolerate service startup timing in CI.
+
 ## v1.0.8 - 2026-06-13
 
 CI smoke-check release.

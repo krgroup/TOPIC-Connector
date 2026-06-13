@@ -17,14 +17,29 @@ fail() {
   exit 1
 }
 
+upload_once() {
+  curl -fsS \
+    -H "x-api-key: $TOKEN" \
+    -F "file=@$FILE" \
+    "$GATEWAY_URL/conectoruc3m/local-assets/upload"
+}
+
 command -v curl >/dev/null 2>&1 || fail "curl is not available"
 [ -f "$FILE" ] || fail "sample file not found: $FILE"
 
-response="$(curl -fsS \
-  -H "x-api-key: $TOKEN" \
-  -F "file=@$FILE" \
-  "$GATEWAY_URL/conectoruc3m/local-assets/upload")" \
-  || fail "local asset upload failed"
+response=""
+attempts="${RETRY_ATTEMPTS:-30}"
+delay="${RETRY_DELAY_SECONDS:-2}"
+i=1
+while [ "$i" -le "$attempts" ]; do
+  if response="$(upload_once)"; then
+    break
+  fi
+  sleep "$delay"
+  i=$((i + 1))
+done
+
+[ -n "$response" ] || fail "local asset upload failed"
 
 printf '%s' "$response" | grep -E '"publicUrl"|"filename"' >/dev/null \
   || fail "upload response does not contain expected file metadata"
