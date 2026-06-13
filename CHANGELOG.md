@@ -1,5 +1,16 @@
 # Changelog
 
+## v1.0.5 - 2026-06-13
+
+SoftwareX manuscript compaction release.
+
+### Changed
+
+- Rewrote the manuscript as a shorter SoftwareX-style software paper.
+- Added explicit capability, repository evidence, and validation-status mapping.
+- Narrowed ArcGIS, contract-negotiation, and production-operation claims to match current evidence.
+- Added the GitHub Actions CI badge to the README.
+
 ## v1.0.4 - 2026-06-12
 
 SoftwareX repository layout release.

@@ -1,6 +1,6 @@
-# TOPIC Connector v1.0.4
+# TOPIC Connector v1.0.5
 
-SoftwareX repository layout release for the TOPIC Connector artifact.
+SoftwareX manuscript compaction release for the TOPIC Connector artifact.
 
 ## Highlights
 
@@ -15,13 +15,16 @@ SoftwareX repository layout release for the TOPIC Connector artifact.
 - Moves production-like profiles under `institutional-profiles/`.
 - Renames the Nginx gateway directory from `traefik/` to `gateway/`.
 - Moves deprecated and historical deployment fragments under `legacy/`.
+- Rewrites the manuscript as a shorter SoftwareX-style software paper.
+- Adds explicit capability, repository evidence, and validation-status mapping.
+- Narrows ArcGIS, contract-negotiation, and production-operation claims to match current evidence.
 
 ## Review Path
 
 ```bash
 git clone https://github.com/krgroup/TOPIC-Connector.git
 cd TOPIC-Connector
-git checkout v1.0.4
+git checkout v1.0.5
 cp .env.example .env
 docker compose --env-file .env -f docker-compose.yaml up -d --build
 ./scripts/validate_stack.sh

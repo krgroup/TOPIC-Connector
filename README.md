@@ -1,5 +1,7 @@
 # TOPIC Connector
 
+[![CI](https://github.com/krgroup/TOPIC-Connector/actions/workflows/ci.yml/badge.svg)](https://github.com/krgroup/TOPIC-Connector/actions/workflows/ci.yml)
+
 TOPIC Connector is a municipal-oriented toolkit for deploying and operating Eclipse Dataspace Components (EDC)-based data connectors. It packages a connector runtime, operator UI, local asset ingestion service, download-capture service, PostgreSQL persistence, and Nginx gateway profiles into reproducible deployment artifacts.
 
 The repository was originally developed under the EITELConnector name. EITEL refers to the broader research and engineering ecosystem; TOPIC Connector is the bounded software artifact released for review, citation, and reuse.
@@ -13,7 +15,7 @@ This repository contains the software artifact described in:
 Recommended artifact version:
 
 - Repository: https://github.com/krgroup/TOPIC-Connector
-- Release: `v1.0.4`
+- Release: `v1.0.5`
 - License: Apache-2.0
 - Support contact: Mario Garcia Rodriguez, Universidad Carlos III de Madrid
 

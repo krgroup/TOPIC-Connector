@@ -3,10 +3,6 @@
 \usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
 \usepackage[english]{babel}
-\usepackage{amsmath,amssymb,amsfonts}
-\usepackage{graphicx}
-\usepackage{textcomp}
-\usepackage{xcolor}
 \usepackage{booktabs}
 \usepackage{array}
 \usepackage{url}
@@ -17,7 +13,7 @@
 
 \begin{frontmatter}
 
-\title{TOPIC Connector: A Toolkit for Engineering and Operating Municipal Data Connectors}
+\title{TOPIC Connector: A Reproducible Toolkit for Early-Stage Municipal Data-Space Connectors}
 
 \author[uc3m]{Mario Garcia Rodriguez}
 \affiliation[uc3m]{organization={Universidad Carlos III de Madrid},
@@ -25,227 +21,89 @@ city={Madrid},
 country={Spain}}
 
 \begin{abstract}
-Data space adoption in public-sector environments requires more than deploying a standards-compliant connector runtime. Organizations also need repeatable deployment artifacts, operator-facing publication workflows, controlled access to local and remote assets, traceable transfer handling, and integration paths with the systems where data is curated or consumed. This paper describes TOPIC Connector, an Apache-2.0-licensed software toolkit built around Eclipse Dataspace Components (EDC). The toolkit packages an EDC runtime with a management user interface, local asset ingestion, download-capture support, PostgreSQL persistence, Nginx gateway routing, Docker Compose deployment profiles, and ArcGIS-oriented integration hooks. The released artifact includes a documented local reproduction path, example data, citation metadata, and validation scripts. The paper focuses on what the software provides, how it can be installed and exercised by an external reviewer, and which claims are supported by the current validation evidence.
+TOPIC Connector is an Apache-2.0-licensed software toolkit for deploying and inspecting early-stage Eclipse Dataspace Components (EDC)-based connector stacks. It packages an EDC runtime with PostgreSQL persistence, an operator web interface, local file publication support, download-capture services, Nginx gateway routing, Docker Compose profiles, examples, and validation scripts. The software is motivated by municipal and geospatial data-sharing pilots, where teams need a reproducible connector baseline before investing in production hardening or cross-organizational certification. The current artifact validates stack health, local asset upload, and download-capture registration through executable smoke tests and continuous integration. ArcGIS authentication and item-upload paths are implemented as integration hooks, but live institutional ArcGIS validation and full cross-connector interoperability benchmarking remain outside the evidence reported here.
 \end{abstract}
 
 \begin{keyword}
-data spaces \sep Eclipse EDC \sep data connector \sep municipal interoperability \sep research software \sep asset publication
+data spaces \sep Eclipse EDC \sep data connector \sep municipal data \sep research software \sep reproducibility
 \end{keyword}
 
 \end{frontmatter}
 
-\section{Introduction}
-Data spaces have emerged as a relevant architectural paradigm for enabling controlled data sharing across organizational boundaries while preserving governance, sovereignty, and contractual control. Although reference frameworks and connector implementations have matured significantly, the practical effort required to deploy and operate a connector in a real institutional environment remains high. The gap is especially visible in municipal and public-sector contexts, where technical teams require repeatable deployment patterns, integration with existing identity providers, controlled publishing workflows, and operational visibility over transfers and negotiations.
-
-In this context, deploying a connector is not merely a matter of starting a runtime. A usable connector must support the full operational lifecycle: publishing assets, attaching access policies, exposing contract definitions, negotiating with counterparties, and executing transfers in a traceable way. For municipal adoption, this lifecycle must additionally be reproducible across entities and adaptable to heterogeneous local constraints.
-
-The EITEL project provides the practical frame for this work. In that broader ecosystem, the connector is not treated as an isolated technical artifact, but as the operational core of a municipal data-sharing environment that must be deployable for more than one institution, support publication of locally managed and externally sourced datasets, and align with GIS-oriented working practices. The software artifact released with this paper is named TOPIC Connector. TOPIC Connector is therefore the bounded, reusable toolkit extracted from the EITEL connector engineering work, while EITEL denotes the wider institutional and research context in which the implementation was developed.
-
-This framing is especially relevant for geolocated information, where municipal teams often need to share files and services that are later consumed in geographic information platforms rather than in purely generic data-processing pipelines. This paper addresses that problem through a software toolkit and the operational workflow embodied by that toolkit. Rather than presenting only an abstract process, the paper describes the released software components, the supported reproduction path, and the operational checks that can be executed by an external user. The contributions of the paper are fourfold:
-
-\begin{itemize}
-\item an Apache-2.0-licensed software artifact, TOPIC Connector, that packages an EDC-based municipal connector with UI, local asset, download-capture, persistence, and gateway components;
-\item a documented local reproduction path with Docker Compose, example data, and validation scripts;
-\item an operational connector workflow centered on publication and traceability rather than on runtime deployment alone;
-\item an evaluation of repeatability, operational consolidation, and publication support with respect to a runtime-only baseline.
-\end{itemize}
-
 \section{Motivation and significance}
-TOPIC Connector addresses the gap between a connector framework and an operable connector instance. Eclipse EDC provides the building blocks for data-space participation, but an organization still needs deployment configuration, gateway routing, persistence, publication workflows, local data handling, transfer capture, and operator-facing views before the connector can be used by non-framework specialists.
+Data spaces require more than a connector runtime. A participant must configure routes, persistence, management access, publication workflows, policies, contract definitions, and transfer handling before data exchange can be operated by non-framework specialists. This gap is relevant in municipal settings, where data may appear as local files, geospatial services, or GIS-managed resources, and where the same technical baseline may need to be replicated across several organizations.
 
-The software is motivated by municipal and public-sector environments, where datasets are commonly prepared as files, geospatial services, or GIS-managed resources, and where connector operation may be shared by infrastructure staff, data owners, and domain operators. In such environments, the value of a connector toolkit is not only protocol support but also repeatable installation, bounded configuration, and visible publication and transfer records.
+TOPIC Connector addresses this practical gap by packaging a reproducible EDC-based connector stack with the auxiliary services needed for early publication and transfer experiments. The artifact is not presented as a certified production connector or as a complete interoperability benchmark. Its purpose is narrower: to provide a public, inspectable, and executable baseline for researchers and engineers studying connector deployment, local asset publication, operator-facing management, and municipal-oriented GIS integration hooks.
 
-The primary intended users are researchers and engineers evaluating EDC-based connector deployments, public-sector teams preparing early data-space pilots, and software maintainers who need an executable reference stack that combines runtime, UI, persistence, local asset handling, and transfer capture in one repository.
+The software can be reused outside the original EITEL project context by teams that need to evaluate EDC deployment patterns, compare connector packaging strategies, prototype data-space publication workflows, or teach connector operation without assembling each component manually. Compared with starting from a minimal EDC runtime, TOPIC Connector saves integration effort by providing a ready local stack, UI wiring, gateway configuration, local upload service, download sink, examples, and validation scripts.
 
 \section{Related work}
-European data-space policy frames trusted data sharing as a strategic capability and is supported by instruments such as the European strategy for data, the Data Governance Act, and the Data Act~\cite{b1,b2,b3,b4}. At the architectural level, IDS-RAM and Gaia-X have shaped the discussion around data sovereignty, trust, policy-aware exchange, and federated participation~\cite{b5,b6}. These references are important for TOPIC Connector because they establish the socio-technical setting in which connectors operate, but they do not prescribe a complete institutional deployment package.
+European data-space policy frames trusted data sharing through instruments such as the European strategy for data, the Data Governance Act, and the Data Act~\cite{b1,b2,b3,b4}. IDS-RAM and Gaia-X provide architectural foundations for sovereignty, trust, usage control, and federated participation~\cite{b5,b6}. These references define the setting in which connectors operate, but they do not by themselves provide a complete institutional deployment package.
 
-At the software level, Eclipse Dataspace Components (EDC) provides a reusable open framework for building dataspace services and connectors~\cite{b7}. Connector implementations remain diverse: Dam et al. compare publicly available IDS-compliant connectors, including DSC, EDC, TRUE Connector, and Trusted Connector, and show that identity, architecture, and policy-language choices differ across implementations~\cite{b12}. Pampus et al. likewise report engineering lessons from an IDS connector reference implementation~\cite{b13}. These works indicate that connector technology is available, but also that practical packaging, deployment, and operation remain relevant engineering problems.
-
-The urban and geospatial setting adds another layer of specificity. Prior work on urban data spaces and on the transition from spatial data infrastructures to data spaces shows that governance, standardization, and geospatial tooling influence how data-sharing infrastructure is adopted~\cite{b14,b15}. Otto further emphasizes that data spaces require interoperability, trust, and sustainable ecosystem conditions rather than isolated technical interfaces alone~\cite{b16}. Recent service-oriented work on dataspaces also suggests that EDC-based deployments are moving beyond static asset exchange toward richer operational interaction models~\cite{b17}.
-
-TOPIC Connector is positioned at this practical boundary. It does not propose a new data-space protocol or a replacement for EDC. Instead, it packages an EDC-based runtime with deployment, gateway, UI, local publication, and transfer-capture components so that early-stage municipal-oriented connector experimentation can be reproduced and inspected from a public repository.
+EDC is a major open framework for building dataspace services and connectors~\cite{b7}. Existing connector implementations differ in architecture, identity handling, and policy-language choices, as shown by surveys and implementation reports covering DSC, EDC, TRUE Connector, and Trusted Connector~\cite{b12,b13}. Urban and geospatial data-space literature further shows that governance, standardized ICT architectures, and spatial-data tooling affect adoption in public-sector environments~\cite{b14,b15,b16}. Recent work also explores service-oriented interaction models on top of EDC~\cite{b17}. TOPIC Connector is positioned below these broader research questions: it supplies a packaged software baseline that can be inspected, reproduced, and extended for early-stage municipal-oriented connector experiments.
 
 \section{Software metadata}
-TOPIC Connector is distributed as a public research software artifact. The reviewed version is identified by a release tag and includes source code, Docker Compose deployment files, example data, validation scripts, citation metadata, and license files. Table~\ref{tab:software-metadata} summarizes the artifact metadata.
-
-\begin{table*}[t]
-\caption{Software metadata for TOPIC Connector}
-\label{tab:software-metadata}
+\begin{table}[t]
+\caption{Software metadata}
+\label{tab:metadata}
 \centering
-\begin{tabular}{p{4.2cm} p{11.5cm}}
+\begin{tabular}{p{4.0cm} p{9.0cm}}
 \toprule
 \textbf{Field} & \textbf{Value} \\
 \midrule
 Software name & TOPIC Connector \\
-Code repository & \url{https://github.com/krgroup/TOPIC-Connector} \\
-Current code version & \texttt{v1.0.4} \\
-Version control system & Git \\
-Legal code license & Apache License 2.0 \\
-Operating system & Linux-based Docker hosts; Docker Desktop has also been used for local validation \\
-Software languages and tools & Java/EDC runtime configuration, Python/FastAPI auxiliary services, HTML/CSS/JavaScript UI, Docker Compose, Nginx \\
-Compilation and runtime requirements & Docker Engine or Docker Desktop with Docker Compose v2; local validation requires \texttt{curl} and a POSIX-compatible shell \\
-Main dependencies & Eclipse Dataspace Components runtime, PostgreSQL, Nginx, Python/FastAPI auxiliary services \\
-Reproduction path & \texttt{docker-compose.yaml}, \texttt{.env.example}, \texttt{examples/}, \texttt{docs/REPRODUCIBILITY.md}, and \texttt{scripts/validate\_*.sh} \\
-Support channel & GitHub issues in the public repository \\
+Repository & \url{https://github.com/krgroup/TOPIC-Connector} \\
+Current code version & \texttt{v1.0.5} \\
+Version control & Git \\
+License & Apache License 2.0 \\
+Operating systems & Linux-based Docker hosts; Docker Desktop for local validation \\
+Languages and tools & Java/EDC configuration, Python/FastAPI, HTML/CSS/JavaScript, Docker Compose, Nginx \\
+Requirements & Docker Engine or Docker Desktop with Compose v2; \texttt{curl}; POSIX-compatible shell for validation scripts \\
+Main dependencies & Eclipse Dataspace Components runtime, PostgreSQL, Nginx, FastAPI auxiliary services \\
+Reproduction path & \texttt{docker-compose.yaml}, \texttt{.env.example}, \texttt{examples/}, \texttt{docs/REPRODUCIBILITY.md}, \texttt{scripts/} \\
+Support & GitHub issues \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
-The repository also contains institutional and experimental profiles. The local Docker Compose stack is the recommended SoftwareX reproduction path. UC3M and Fuenlabrada production-like profiles are retained to document real deployment engineering constraints, while STAR, dual, and LAN-oriented profiles are treated as experimental extensions rather than as the core reviewed artifact.
+The repository root contains the reviewed local stack and software metadata. Secondary connector profiles are stored under \texttt{experimental/}; production-like UC3M and Fuenlabrada profiles are stored under \texttt{institutional-profiles/}; deprecated deployment fragments are stored under \texttt{legacy/}. This separation keeps the SoftwareX review path distinct from institutional and experimental material.
 
-The software release includes a \texttt{CITATION.cff} file, a \texttt{NOTICE} file, a changelog, contribution and security notes, and a reproducibility guide. The public release tag identifies the executable artifact reviewed in this manuscript.
+\section{Software description}
+TOPIC Connector combines the components listed in Table~\ref{tab:components}. The baseline used for comparison in this paper is a minimal EDC runtime exposing management and DSP services without the additional UI, local-assets, download-sink, gateway, example, and validation layers packaged by TOPIC Connector. This is a conceptual software-packaging baseline, not a quantitative benchmark against an official EDC distribution.
 
-\section{Operational workflow}
-The software was designed around a compact operational workflow that can be exercised from the released repository. First, the sharing scenario is characterized by identifying the provider, the resource type, the expected consumption mode, and the access restrictions. Second, a reusable Docker Compose template is instantiated through environment variables rather than source-code changes. Third, the resource is modeled as a connector asset with metadata, source binding, policy, and contract-definition information. Fourth, publication and follow-up are performed through the management layer, which exposes local upload, remote URL publication, policy and contract handling, and transfer-related views. Finally, the deployed service is validated through scripts that check stack health, local upload, and download-capture behavior.
-
-This workflow is guided by four principles:
-
-\begin{enumerate}
-\item \textit{reproducibility}: deployments must be replicable across organizations through controlled parameter sets;
-\item \textit{operability}: publication and consumption workflows must be executable without relying exclusively on manual API calls;
-\item \textit{traceability}: negotiations, transfers, and local operational actions must be visible from the management layer;
-\item \textit{adaptability}: the same connector base must support local and remote assets, different authentication schemes, and different deployment contexts.
-\end{enumerate}
-
-\section{Software Description}
-TOPIC Connector implements the proposed workflow as a municipal-oriented data sharing toolkit built on top of Eclipse EDC. The software packages the connector runtime together with an administrative UI, local asset and download-capture services, deployment templates, and gateway configurations. Within the EITEL ecosystem, the same technical base has also been instantiated in UC3M and Fuenlabrada profiles; these profiles are treated in the released repository as institutional deployment examples rather than as separate software products.
-
-Table~\ref{tab:components} summarizes the main components of the software artifact and their operational role.
-
-\begin{table*}[t]
-\caption{Main components of TOPIC Connector}
+\begin{table}[t]
+\caption{Main software components}
 \label{tab:components}
 \centering
-\begin{tabular}{p{3.2cm} p{3.0cm} p{4.6cm} p{4.4cm}}
+\begin{tabular}{p{3.0cm} p{3.0cm} p{6.7cm}}
 \toprule
-\textbf{Component} & \textbf{Technology} & \textbf{Role} & \textbf{Observable output} \\
+\textbf{Component} & \textbf{Technology} & \textbf{Role} \\
 \midrule
-Connector runtime & Eclipse EDC / Java & Core asset, policy, contract, negotiation, and transfer functionality & Management API state, agreements, transfer processes \\
-Management UI & HTML, CSS, JavaScript, Nginx & Operator-facing interface for publication, catalog browsing, contracts, and transfers & User-visible asset, policy, contract, and transfer views \\
-local-assets & Python / FastAPI & Upload and controlled exposure of files managed by the data provider & Stored artifact and retrievable source URL \\
-download-sink & Python / FastAPI & Capture of transferred payloads and operational transfer records & Stored payload and indexed record with connector identifiers \\
-PostgreSQL & PostgreSQL & Persistence for EDC runtime state & Durable connector state across restarts \\
-Gateway & Nginx & Stable routing for UI, management, DSP, local-assets, and download-sink routes & Public HTTP entry points under connector-specific prefixes \\
-Deployment profiles & Docker Compose & Reproducible local and institutional stacks & Executable container composition for validation and deployment \\
+Connector runtime & EDC / Java & Asset, policy, contract, negotiation, and transfer state \\
+Management UI & HTML/CSS/JavaScript & Operator-facing publication, catalog, contract, transfer, and GIS-oriented actions \\
+local-assets & Python/FastAPI & Local file upload and controlled retrieval URL generation \\
+download-sink & Python/FastAPI & Payload capture and transfer record listing with connector identifiers \\
+PostgreSQL & PostgreSQL & Durable EDC runtime state \\
+Gateway & Nginx & Stable routing for UI, management, DSP, local-assets, and download-sink endpoints \\
+Deployment profiles & Docker Compose & Local reproduction plus institutional and experimental profiles \\
 \bottomrule
 \end{tabular}
-\end{table*}
+\end{table}
 
-From an operational perspective, TOPIC Connector introduces several features beyond a baseline connector deployment.
+The publication workflow supports remote URLs and locally uploaded files. A resource becomes data-space-ready only after it is represented as an EDC asset and linked to policy and contract-definition information. The UI exposes this workflow so that publication steps do not depend only on manual management-API calls.
 
-First, the publication flow supports two asset origin modes: remote resources referenced by URL and locally uploaded files. This distinction is important in municipal environments, where datasets may exist either as already exposed services or as files prepared internally for controlled sharing.
+The software also implements ArcGIS-oriented authentication and item-upload hooks. These hooks are included because municipal geospatial data is often curated or consumed in GIS platforms. In the current evidence, they should be interpreted as implemented integration paths, not as live production validation against an institutional ArcGIS Portal.
 
-Second, the publication flow supports multiple authentication modes for protected upstream resources, including unauthenticated access, API token access, OAuth2-based access, and delegated session-token usage. This makes the connector usable against heterogeneous institutional systems without redesigning the publication pipeline for each data source.
+\section{Illustrative workflow}
+A typical local experiment starts with a provider running the Docker Compose stack and opening the UI through the Nginx gateway. The provider uploads a GeoJSON file to the local-assets service, receives a controlled retrieval URL, registers the asset in the connector, and attaches policy and contract-definition information. A consumer-side workflow can then inspect catalog information, negotiate access, execute transfer, and capture the resulting payload in the download-sink service. The current release validates the local upload and download-capture parts of this workflow; full cross-connector negotiation is retained as experimental material.
 
-Third, transfer execution supports both a remote transfer mode and a local download-oriented mode. This is relevant because some operational contexts require automated endpoint-based consumption, while others require direct technical validation of the retrieved artifact from the operator console. In municipal geospatial scenarios, this duality is useful for resources that may either remain available as sovereignly hosted files/services or be transferred for downstream use in GIS environments.
-
-Fourth, transfer activity is integrated into a unified operational view. Local download actions are not treated as disconnected auxiliary events, but as part of the overall transfer history. This improves observability and helps align technical execution with functional follow-up.
-
-Fifth, access to the operational console can be protected through ArcGIS-based authentication configured at deployment time. In addition, the management interface implements an ArcGIS upload path that can take a transferred asset, resolve its binary payload, and submit it to an ArcGIS Portal item endpoint. In the released software, this is an implemented integration path for GIS-oriented workflows; its live institutional performance is treated as a topic for further evaluation rather than as a completed benchmark.
-
-Finally, the connector is packaged as an early-stage municipal-oriented deployment kit. The kit preserves a common technical base while parameterizing identity, routes, credentials, and service exposure. This supports repeatable local experimentation and bounded adaptation across municipal profiles, although the present evaluation remains focused on service-level reproducibility checks rather than longitudinal multi-municipality operation.
-
-\section{Illustrative example}
-A typical local use case starts with a municipal operator who wants to publish a geospatial file prepared outside the connector. The operator starts the local stack, opens the management interface through the gateway, uploads a GeoJSON file through the local-assets service, and receives a retrievable URL controlled by TOPIC Connector. The asset is then registered in the EDC management plane with metadata, linked to an access policy, and exposed through a contract definition.
-
-On the consumer side, the intended operational sequence is catalog inspection, contract negotiation, agreement creation, transfer execution, and payload capture by the download-sink service. The current release validates the local upload and download-capture parts of this scenario with executable scripts. Full cross-connector negotiation is documented as an experimental validation path and remains the next step for strengthening the artifact evidence.
-
-Table~\ref{tab:use-case-evidence} maps the example workflow to repository evidence.
-
-\begin{table*}[t]
-\caption{Illustrative municipal publication workflow and current evidence}
-\label{tab:use-case-evidence}
-\centering
-\begin{tabular}{p{4.0cm} p{5.4cm} p{6.4cm}}
-\toprule
-\textbf{Workflow step} & \textbf{Repository support} & \textbf{Current validation status} \\
-\midrule
-Start connector stack & \texttt{docker-compose.yaml}, \texttt{.env.example} & Checked by \texttt{validate\_stack.sh} through gateway and service reachability \\
-Upload local geospatial file & \texttt{local-assets} FastAPI service and example files & Checked by \texttt{validate\_local\_asset\_upload.sh} \\
-Register publishable asset & EDC runtime and management UI & Implemented in the UI and management integration; not separately benchmarked in the smoke scripts \\
-Attach policy and contract definition & EDC management workflow exposed in the UI & Implemented as part of the publication workflow \\
-Capture transferred payload & \texttt{download-sink} FastAPI service & Checked by \texttt{validate\_download\_capture.sh} with \texttt{contractId}, \texttt{assetId}, and \texttt{transferId} \\
-Upload received payload to ArcGIS & ArcGIS-oriented UI workflow & Implemented integration path; live institutional ArcGIS validation remains pending \\
-\bottomrule
-\end{tabular}
-\end{table*}
-
-\section{Validation}
-The evaluation focuses on whether the released software artifact provides a reproducible and operationally useful baseline for early-stage municipal-oriented connector experimentation compared with a runtime-only connector setup. In this paper, the baseline is a connector runtime exposing core EDC services but lacking the additional layers packaged by TOPIC Connector, such as local asset ingestion, a unified management UI, download capture, deployment templates, and GIS-oriented integration paths. Since the present work is centered on a software artifact and its engineering context, the evaluation combines qualitative analysis with executed service-level validation. The goal is not to report benchmark numbers or claim full production certification, but to document which software capabilities were exercised, how they map to data-space operation, and what an external reviewer can reproduce from the repository.
-
-This evaluation strategy should also be understood in relation to the type of contribution made by the paper. Whereas Arnold et al. evaluate a concrete service architecture for dataspaces through runtime behavior and latency overhead measurements~\cite{b17}, the present work evaluates a deployment-oriented software toolkit. Accordingly, the emphasis here is on reproducibility of deployment, completeness of publication workflow, and traceability of transfer-related actions. This does not replace performance or interoperability evaluation; rather, it provides an executable engineering baseline on which such evaluations can later be built.
-
-\subsection{Evaluation framing}
-The evaluation is organized around four questions that are directly derived from the role of connectors in data spaces.
-
-\begin{itemize}
-\item \textbf{RQ1}: Does the proposed deployment model improve reproducibility compared with a baseline runtime-only setup?
-\item \textbf{RQ2}: Does the workflow support the publication of data-space-ready assets from multiple source types?
-\item \textbf{RQ3}: Does the resulting connector improve operational traceability across publication and transfer activities?
-\item \textbf{RQ4}: Does the software provide implemented integration hooks for municipal systems in which geolocated data is curated or consumed?
-\end{itemize}
-
-These questions are intentionally operational rather than performance-centric. This is consistent with the maturity level of the current artifact and with the paper's main claim: an important bottleneck for early municipal participation in data spaces is the ability to instantiate, configure, operate, and validate a connector as a coherent service.
-
-\subsection{Evaluation criteria}
-Five criteria are used.
-
-\begin{itemize}
-\item \textbf{Deployment repeatability}: the extent to which a new connector instance can be created by configuration rather than code changes.
-\item \textbf{Publication completeness}: the ability to publish assets from different origins with the associated policy and contract layers.
-\item \textbf{Operational consolidation}: the degree to which operators can manage publication, negotiation, and transfer from a single environment.
-\item \textbf{Authentication adaptability}: the capability to integrate with protected upstream resources and controlled console access.
-\item \textbf{Municipal applicability}: the degree to which the connector package supports municipal and GIS-facing deployment requirements.
-\end{itemize}
-
-Table~\ref{tab:evaluation-matrix} summarizes the relation between the evaluation questions, the evidence currently available, and the type of conclusion that can be defended without overstating the results.
-
-Table~\ref{tab:baseline-comparison} complements this view by contrasting the baseline runtime-only setup with TOPIC Connector packaging. Its purpose is not to claim universal superiority for one connector architecture, but to make explicit which engineering capabilities are added by the software artifact and why they matter for municipal participation in data spaces.
-
-\begin{table*}[t]
-\caption{Evaluation matrix for TOPIC Connector}
-\label{tab:evaluation-matrix}
-\centering
-\begin{tabular}{p{1.1cm} p{3.2cm} p{5.5cm} p{6.5cm}}
-\toprule
-\textbf{RQ} & \textbf{Focus} & \textbf{Evidence used} & \textbf{Supported conclusion} \\
-\midrule
-RQ1 & Reproducibility & Parameterized Docker Compose deployment, release metadata, example data, and validation scripts & The connector package can be instantiated from repository artifacts without source-level adaptation for local smoke testing. \\
-RQ2 & Publication completeness & Executed local upload workflow, modeled support for remote URLs, policy creation, and contract-definition creation & The software covers the transition from raw source registration to contract-ready asset publication for more than one source type. \\
-RQ3 & Operational traceability & Executed download-sink ingestion and record listing with \texttt{contractId}, \texttt{assetId}, and \texttt{transferId} & The connector operational layer preserves traceable identifiers across transfer-related actions instead of relegating them to disconnected technical logs. \\
-RQ4 & Municipal system hooks & ArcGIS-based authentication path, ArcGIS upload path in the management workflow, geospatial framing of the artifact & The software implements GIS-oriented integration hooks, although live institutional ArcGIS benchmarking is still pending. \\
-\bottomrule
-\end{tabular}
-\end{table*}
-
-\begin{table*}[t]
-\caption{Baseline runtime-only setup versus TOPIC Connector packaging}
-\label{tab:baseline-comparison}
-\centering
-\begin{tabular}{p{4.0cm} p{5.2cm} p{6.6cm}}
-\toprule
-\textbf{Dimension} & \textbf{Baseline runtime-only setup} & \textbf{TOPIC Connector} \\
-\midrule
-Deployment model & Connector runtime exposed with core services and environment-specific setup effort & Parameterized deployment kit including runtime, persistence, UI, and auxiliary services \\
-Asset onboarding & Mainly technical registration through management endpoints & Publication workflow covering local upload, remote URLs, metadata enrichment, and contract-ready asset preparation \\
-Policy and contract handling & Possible through APIs, but fragmented for non-expert operators & Integrated creation of asset, policy, and contract definition from the same operational surface \\
-Operational visibility & Protocol correctness can be achieved, but operator visibility remains limited & Unified UI for publication, negotiation context, and transfer-related follow-up \\
-Transfer traceability & Depends on logs and lower-level technical inspection & Download capture and record listing preserve visible operational identifiers across transfer actions \\
-Authentication integration & Source-specific adaptation left largely to deployment or custom integration work & Multiple source authentication modes plus ArcGIS-oriented login and upload path \\
-Municipal GIS alignment & No explicit support for GIS-centered operator workflows & Integration path between connector exchange and ArcGIS-oriented municipal data handling \\
-Replication across organizations & Feasible, but prone to ad hoc divergence across deployments & Provides a bounded technical unit and documented profiles for municipal instantiation \\
-\bottomrule
-\end{tabular}
-\end{table*}
-
-\subsection{Executed validation activities}
-The validation activities reported in this paper were executed on the local TOPIC Connector deployment artifacts and focused on reproducible engineering checks. The repository exposes these checks as scripts under \texttt{scripts/}, together with \texttt{.env.example} and sample files under \texttt{examples/}. The intended reproduction sequence is:
+\section{Reproducibility and validation}
+The intended reproduction sequence is:
 
 \begin{verbatim}
 git clone https://github.com/krgroup/TOPIC-Connector.git
 cd TOPIC-Connector
-git checkout v1.0.4
+git checkout v1.0.5
 cp .env.example .env
 docker compose --env-file .env -f docker-compose.yaml up -d --build
 ./scripts/validate_stack.sh
@@ -253,67 +111,41 @@ docker compose --env-file .env -f docker-compose.yaml up -d --build
 ./scripts/validate_download_capture.sh
 \end{verbatim}
 
-The scripts are designed to emit explicit \texttt{[OK]} or \texttt{[FAIL]} messages for gateway reachability, Docker Compose visibility, EDC runtime health, local asset upload, and download-capture record listing.
+The repository CI validates Docker Compose configuration, checks selected frontend JavaScript files, starts the local reproduction stack, and runs the three smoke checks. Table~\ref{tab:evidence} separates implemented capabilities from validated evidence.
 
-First, the Docker Compose deployment of the local stack was executed and the core runtime reached a healthy state together with its persistence and auxiliary services. This confirms that the connector package can be instantiated from repository artifacts without source-code changes for local validation, which directly supports the repeatability criterion.
-
-Second, the auxiliary control-plane service for local assets was verified through its health endpoint, confirming correct startup of the publication support layer. A raw upload operation was then executed against the local-assets API, resulting in successful storage of a test artifact and generation of a public retrieval URL. This demonstrates that locally managed files can be converted into connector-usable publication inputs instead of remaining outside the operational workflow.
-
-Third, the download-capture path was exercised by posting a test payload to the download-sink ingestion endpoint with explicit \texttt{contractId}, \texttt{assetId}, and \texttt{transferId} values. The service persisted the received artifact, registered a transfer record, and exposed that record through the corresponding listing endpoint. This is a relevant validation because it proves that local download-oriented transfers are not treated as opaque side effects; they become traceable operational objects linked to connector semantics.
-
-These checks do not yet constitute a full interoperability benchmark across independent institutional connectors, but they do validate the operational substrate on which such benchmarks depend: deployability, local publication support, and operator-visible transfer capture. In other words, they do not prove that every data-space concern has been solved, but they do show that the connector can already support several of the practical capabilities required to participate in a data space beyond a proof-of-concept runtime.
-
-Seen from the broader data-space perspective, this type of evidence is especially relevant in early municipal deployments. Data spaces require more than protocol conformance: they require that organizations can actually instantiate the software stack, bind local and remote resources into policy-aware assets, and maintain visibility over exchange operations. The executed checks therefore function as readiness indicators for participation in a data space, even if they are not yet cross-organizational benchmarks.
-
-\subsection{Discussion of results}
-Regarding deployment repeatability, TOPIC Connector improves over a baseline setup by externalizing environment-specific concerns into parameterized deployment artifacts. This reduces the effort required to instantiate a local connector stack and lowers the risk of source-level divergence. From a software-engineering standpoint, this is a relevant result because repeatability is one of the main conditions for broader adoption. From a data-space perspective, it also matters because connectors are expected to be replicated across participants; a deployment model that only works as a one-off engineering effort is difficult to reconcile with the broader idea of reusable participation in a federated ecosystem.
-
-Regarding publication completeness, the connector supports both remote and local asset onboarding, which broadens the class of publishable resources. In addition, the publication workflow makes explicit the transition from source registration to asset creation, policy definition, and contract exposure. This explicit staging reduces the ambiguity that frequently appears when operators equate ``uploading data'' with ``publishing a negotiable asset.'' The executed raw-upload validation shows that the local publication path is not merely designed in the abstract; it is operationally available. This is particularly relevant in data spaces, where publication is not just a storage action but the preparation of a discoverable and negotiable offer with metadata, policy, and contractual semantics.
-
-Operational consolidation is improved through the management UI and the integration of transfer tracking into a single user-facing environment. Instead of separating technical and functional visibility, the approach makes publication and consumption steps observable from the same operational layer. The executed download-capture validation is especially relevant here, because it confirms that transfer-related artifacts can be registered and listed with connector-specific identifiers rather than being handled outside the connector toolchain. This matters in municipal contexts, where connector operation may be shared across infrastructure staff, functional data owners, and integration teams. More broadly, it also addresses a recurrent weakness in data-space implementations: the gap between formally correct protocol support and the operator's ability to understand what actually happened during exchange.
-
-Authentication adaptability is strengthened by supporting different source-side authentication patterns and by incorporating configurable front-end access control. This is especially relevant for public-sector deployments, where data providers and user-access systems are rarely homogeneous. In methodological terms, authentication is treated as a first-class concern of connector publication, not as an afterthought delegated to manual integration work. The ArcGIS-oriented path is important in this regard: it provides a concrete integration target for GIS-centered operator environments and for municipal geolocated datasets that are later curated in ArcGIS platforms. For data spaces, this is not a peripheral integration issue; it is part of the practical challenge of linking sovereign exchange mechanisms with the heterogeneous systems that participants already use.
-
-Finally, municipal-oriented applicability is supported by the deployment-kit approach. Rather than treating each deployment as a fully bespoke project, the workflow frames the connector as a replicable technical unit that can be instantiated with bounded configuration effort. The present evidence supports this claim at the level of local reproduction and service-level validation; stronger claims about sustainable multi-entity operation require longer deployments and external replication.
-
-Taken together, these observations support the central claim of the paper: the main engineering challenge is not only to build a standards-compliant connector, but to transform it into an executable and operationally coherent software artifact. TOPIC Connector suggests that this transformation requires connector-centered workflow design as much as connector technology.
-
-\subsection{Threats to validity and limitations}
-The evaluation is currently based on a released software artifact and an engineering case study rather than on a large comparative benchmark across multiple organizations. Therefore, the present results support the usefulness of the packaging approach, but do not yet quantify large-scale adoption metrics such as onboarding time reduction, mean operational error rate, or long-term maintenance cost. Likewise, the present paper does not claim that the TOPIC Connector configuration is the only possible connector packaging strategy. Rather, it argues that an operational workflow of this kind is useful, and that the software artifact provides one executable instantiation.
-
-Another limitation is that the evaluation focuses primarily on engineering and operation concerns rather than on legal enforceability, semantic interoperability depth, or federated trust certification. These dimensions are relevant and closely related, but they should be analyzed as complementary layers on top of the deployment and publication workflow presented here.
-
-Additionally, although the implementation includes ArcGIS-oriented authentication and item-upload logic, this paper does not report a live end-to-end evaluation against an institutional ArcGIS Portal instance. Therefore, ArcGIS should be interpreted here as an implemented integration path and application frame for geolocated data workflows, not as a quantitatively benchmarked external dependency.
-
-A further threat to validity is the current granularity of the evidence. The reported checks demonstrate that the main operational building blocks are executable, but they are smoke tests rather than an independent, longitudinal, multi-organization study. They do not yet provide a view of maintenance effort, operator learning curve, or inter-organizational governance overhead. Those aspects are highly relevant in mature data spaces and should be studied in future deployments involving multiple municipalities and external counterparties.
-
-The repository also preserves local demonstration profiles and institutional profiles that expose different security trade-offs. In particular, browser-visible credentials in local demo profiles should not be interpreted as a recommended production security pattern. Production deployments should protect privileged management operations behind an authenticated backend or gateway layer. This distinction is documented in the released repository and should be considered when reusing the artifact.
-
-Table~\ref{tab:security-scope} summarizes the intended security interpretation of the current profiles.
-
-\begin{table}[t]
-\caption{Security scope of TOPIC Connector deployment profiles}
-\label{tab:security-scope}
+\begin{table*}[t]
+\caption{Capability, repository evidence, and validation status}
+\label{tab:evidence}
 \centering
-\begin{tabular}{p{2.8cm} p{4.7cm}}
+\begin{tabular}{p{3.4cm} p{5.6cm} p{6.0cm}}
 \toprule
-\textbf{Context} & \textbf{Expected security posture} \\
+\textbf{Capability} & \textbf{Repository evidence} & \textbf{Validation status} \\
 \midrule
-Local SoftwareX reproduction & Placeholder tokens, local-only gateway, no institutional secrets \\
-Closed pilot & Authenticated gateway, rotated secrets, restricted network exposure \\
-Production deployment & Backend proxy for privileged management calls, role-based access control, no privileged browser-visible keys \\
+Reproducible local deployment & \texttt{docker-compose.yaml}, \texttt{.env.example}, CI workflow & Validated by Compose configuration, stack startup, and gateway/runtime health checks \\
+Local asset publication input & \texttt{local-assets}, \texttt{examples/sample.geojson} & Validated by \texttt{validate\_local\_asset\_upload.sh}; expected output includes an accepted upload and file metadata \\
+Download capture & \texttt{download-sink} service & Validated by \texttt{validate\_download\_capture.sh}; expected record includes \texttt{contractId}, \texttt{assetId}, and \texttt{transferId} \\
+Operator UI workflow & \texttt{caas/edc-ui} & Implemented and syntax-checked; not independently benchmarked as a scripted browser test \\
+Policy and contract creation & EDC runtime and UI integration & Implemented; current smoke tests do not claim policy enforcement validation \\
+Cross-connector negotiation & Experimental connector profiles & Experimental; not claimed as validated evidence in this paper \\
+ArcGIS integration & UI and auxiliary-service hooks & Implemented hooks; live institutional ArcGIS validation remains future work \\
 \bottomrule
 \end{tabular}
-\end{table}
+\end{table*}
 
-Finally, the current evaluation does not yet include comparative measurements against other connector implementations or service-oriented extensions. This is relevant because recent data-space work is increasingly studying not only whether connectors exchange assets correctly, but also how they support richer interaction patterns, practical applicability, and runtime implications~\cite{b17}. Extending the present evaluation in that direction would strengthen its external validity.
+The smoke tests intentionally focus on reproducibility and operational substrate: whether the stack starts, whether local files can become connector publication inputs, and whether transferred payloads can be captured with traceable identifiers. They do not establish full data-space interoperability, policy enforcement, performance, or production security certification.
 
-\section{Conclusions and Future Work}
-This paper has presented TOPIC Connector, a software toolkit for engineering and operating municipal data connectors on top of Eclipse Dataspace Components. The main argument is that a connector becomes valuable in practice not only when it complies with protocol expectations, but when it can be deployed reproducibly, configured safely, used to publish assets from realistic sources, and operated through a coherent management layer.
+\section{Impact}
+TOPIC Connector is useful as a reproducible research and engineering baseline. It enables experiments on connector packaging, local asset onboarding, gateway routing, UI-mediated publication, and transfer observability without requiring each user to assemble an EDC stack and auxiliary services from scratch. The municipal and GIS framing is the motivating use case, but the same packaging approach can be reused in other public-sector or research pilots where controlled files, APIs, and operator-facing workflows must be connected to a data-space runtime.
 
-Compared with a runtime-only baseline, TOPIC Connector adds a documented deployment kit, operator UI, local asset ingestion, download capture, gateway routing, and ArcGIS-oriented integration hooks. In that sense, the paper's contribution is not a new connector protocol or a new performance optimization, but an executable software artifact and accompanying engineering method for turning data-space technology into an operable municipal connector baseline. This complements recent data-space literature that emphasizes connector diversity~\cite{b12}, data-space design conditions such as interoperability and sovereignty~\cite{b16}, and richer service-oriented interaction models on top of EDC~\cite{b17}.
+The artifact also supports comparative work. Researchers can replace or extend components, compare the packaged workflow with a minimal EDC runtime, or use the repository as a teaching and demonstration environment for connector operation. Its most immediate impact is therefore not production certification, but lowering the barrier to reproducible connector experimentation.
 
-Future work should proceed in four directions. First, the reproducibility package should be complemented with archival releases and independent replication evidence. Second, the workflow should be validated across multiple institutional deployments to measure onboarding effort, maintenance overhead, and reproducibility more rigorously. Third, the evaluation should be extended with systematic interoperability tests against other connector implementations such as DSC, TRUE Connector, and Trusted Connector, as well as with quantitative indicators for publication and transfer workflows. Fourth, the current ArcGIS-oriented integration path should be assessed in live institutional settings to determine how well connector-mediated exchange supports real geospatial publication and reuse scenarios.
+\section{Security scope and limitations}
+The local reproduction profile uses placeholder tokens and is intended for local review. Historical and demo profiles may expose management or local-assets tokens to browser-visible variables. This is acceptable only in local demonstrations. Closed pilots should use authenticated gateway access and rotated secrets. Production deployments should hide privileged management operations behind an authenticated backend or gateway layer and should not expose privileged keys to browser clients.
+
+The main limitation is validation depth. The current paper reports smoke tests rather than a longitudinal multi-organization study. It does not report live ArcGIS Portal validation, independent municipal operator evaluation, performance measurements, or cross-connector interoperability benchmarks. These are necessary next steps before making stronger claims about production municipal deployment.
+
+\section{Conclusions}
+TOPIC Connector provides a public, Apache-2.0-licensed toolkit for reproducing and inspecting an EDC-based connector stack with UI, local upload, download capture, gateway routing, examples, and validation scripts. The artifact is best understood as an early-stage municipal-oriented experimentation baseline. Its current evidence supports reproducible local deployment, local asset upload, and download-capture registration; broader claims about production operation, ArcGIS deployment, and cross-connector interoperability remain future work.
 
 \begin{thebibliography}{00}
 \bibitem{b1} European Commission, ``A European strategy for data,'' 2020. [Online]. Available: https://digital-strategy.ec.europa.eu/en/policies/strategy-data
@@ -323,10 +155,6 @@ Future work should proceed in four directions. First, the reproducibility packag
 \bibitem{b5} International Data Spaces Association, ``IDS Reference Architecture Model, Version 4.0,'' 2019.
 \bibitem{b6} Gaia-X European Association for Data and Cloud AISBL, ``Gaia-X Architecture Document,'' 2025. [Online]. Available: https://docs.gaia-x.eu/technical-committee/architecture-document/latest/
 \bibitem{b7} Eclipse Foundation, ``Eclipse Dataspace Components,'' [Online]. Available: https://projects.eclipse.org/projects/technology.edc
-\bibitem{b8} European Commission, ``Regulation (EU) 2022/868 of the European Parliament and of the Council of 30 May 2022 on European data governance (Data Governance Act),'' Official Journal of the European Union, 2022.
-\bibitem{b9} European Union, ``Regulation (EU) 2023/2854 of the European Parliament and of the Council of 13 December 2023 on harmonised rules on fair access to and use of data (Data Act),'' Official Journal of the European Union, 2023.
-\bibitem{b10} European Commission, ``Second Staff Working Document on Common European Data Spaces,'' 2024.
-\bibitem{b11} Catena-X, ``Catena-X: The data ecosystem for resilient and sustainable supply chains,'' [Online]. Available: https://catena-x.net/en/
 \bibitem{b12} T. Dam, L. D. Klausner, S. Neumaier, and T. Priebe, ``A survey of dataspace connector implementations,'' arXiv preprint arXiv:2309.11282, 2023.
 \bibitem{b13} J. Pampus, B.-F. Jahnke, and R. Quensel, ``Evolving data space technologies: Lessons learned from an IDS connector reference implementation,'' in \textit{Proceedings of the 11th International Symposium on Leveraging Applications of Formal Methods, Verification and Validation}, 2022, pp. 366--381.
 \bibitem{b14} A. Kotsev, M. Minghini, R. Tomas, V. Cetl, and M. Lutz, ``From spatial data infrastructures to data spaces -- a technological perspective on the evolution of European SDIs,'' \textit{ISPRS International Journal of Geo-Information}, vol. 9, 2020.
